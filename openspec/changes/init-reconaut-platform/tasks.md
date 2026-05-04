@@ -58,9 +58,13 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## 4. Interface agent — spec : `agent-interface`
 
-- [ ] **4.1 Pipeline d'embedding `multilingual-e5-small`**
-  - **Notes** : Packager le modèle ONNX `multilingual-e5-small` (384-dim) comme artefact Reconaut dans le build (image conteneur ou volume monté en production). Ne **pas** dépendre des fichiers `models/` ou `config.json` éventuellement présents dans le working tree (ils appartiennent au projet `devrag` et sont git-ignored). Defaults : `chunk_size=500`, `top_k=5`. CPU par défaut ; GPU optionnel via configuration applicative Reconaut.
-  - **Test plan** : `pytest tests/agent/test_embed.py` assure (a) dim de sortie 384, (b) déterminisme pour la même entrée, (c) accord entre chemin batch et single-item, (d) test de smoke qui résout l'artefact via le mécanisme de packaging Reconaut (pas via un chemin relatif `models/...`).
+- [ ] **4.1 Intégration de l'API d'embedding Mistral**
+  - **Notes** : Client `mistral-embed` (1024-dim) côté backend. Endpoint EU uniquement ; la clé API tenant Reconaut vit dans le secret manager — jamais en code, image, ou repo. Encapsuler le client derrière une interface `Embedder` (port hexagonal) pour permettre une substitution future sans toucher au reste du code. Cache local par hash de chunk pour éviter les appels redondants. Defaults : `chunk_size=500`, `top_k=5`.
+  - **Test plan** : `pytest tests/agent/test_embed.py` (a) avec un mock de l'API Mistral, vérifie la dim de sortie 1024 et le déterminisme batch vs single-item, (b) un test contractuel gated par variable d'environnement `MISTRAL_API_KEY` valide la forme réelle de la réponse contre le sandbox Mistral, (c) un test de cache assure qu'une seconde requête identique ne ré-appelle pas l'API.
+
+- [ ] **4.1bis Résilience et observabilité de l'API d'embedding**
+  - **Notes** : Timeout par appel à 2,5 s ; circuit breaker (par ex. `pybreaker`) avec seuils par défaut N=5 échecs / 30 s, ouvert pendant 60 s. Métriques Prometheus `embedding_provider_failures_total`, `embedding_provider_latency_seconds`. Quand l'API est down, l'agent renvoie 503 plutôt qu'un fallback fabriqué.
+  - **Test plan** : Test qui simule des 5xx Mistral via mock et assure (a) HTTP 503 renvoyé par l'agent avec body `{"error":"embedding_provider_unavailable"}`, (b) compteur de failures incrémenté, (c) circuit breaker s'ouvre après N échecs et rejette les appels suivants immédiatement, (d) timeout de 2,5 s coupe les requêtes longues sans laisser de tâches en arrière-plan.
 
 - [ ] **4.2 Vector store avec filtre tenant poussé dans la requête**
   - **Notes** : pgvector avec index HNSW. Le SQL de retrieval applique `WHERE tenant_id IN (:caller, 'public')` directement ; jamais en post-filtre Python.

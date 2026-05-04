@@ -46,3 +46,21 @@ Tout accès à des données personnelles et tout changement de politique de scan
 #### Scenario: Réplication cross-région d'audit
 - **WHEN** une entrée d'audit est écrite dans n'importe quelle région EU active
 - **THEN** elle est observable depuis les autres régions EU actives en moins de 5 secondes (p99) ; un test de monitoring continu publie une métrique `audit_replication_lag_seconds`
+
+### Requirement: Sous-traitants externes (Art. 28)
+Tout sous-traitant externe (par ex. fournisseur d'embeddings, fournisseur d'auth, fournisseur de paiement) DOIT être encadré par un Data Processing Agreement conforme à l'Art. 28 RGPD avant qu'aucune donnée tenant ne lui soit envoyée. Le registre des sous-traitants DOIT être public (page DPA accessible) et tenu à jour avec finalité, juridiction, et date de signature du DPA.
+
+#### Scenario: Mistral comme sous-traitant d'embeddings
+- **GIVEN** Mistral fournit le service `mistral-embed` utilisé par l'agent Reconaut
+- **WHEN** la plateforme route une requête d'embedding contenant des données tenant vers Mistral
+- **THEN** un DPA Art. 28 signé avec Mistral DOIT exister et imposer (a) résidence intra-EU des données, (b) interdiction de réutilisation pour entraînement, (c) notification d'incident sous 72 h
+- **AND** la page publique des sous-traitants liste Mistral avec finalité « génération d'embeddings », juridiction « France/EU » et date de signature du DPA
+
+#### Scenario: Endpoint EU strict pour les sous-traitants
+- **WHEN** un client de sous-traitant externe (par ex. Mistral) est instancié au runtime
+- **THEN** l'URL configurée correspond explicitement au endpoint EU déclaré dans le DPA ; tout autre endpoint déclenche un refus de boot avec erreur `subprocessor-endpoint-not-eu`
+
+#### Scenario: Sous-traitant retiré du registre
+- **GIVEN** un sous-traitant a été retiré (DPA terminé)
+- **WHEN** la plateforme tente d'instancier un client pour ce fournisseur
+- **THEN** l'instanciation échoue avec erreur `subprocessor-not-authorized` ; aucun appel sortant n'est émis

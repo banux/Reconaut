@@ -4,14 +4,14 @@ Reconaut est un SaaS européen, conforme RGPD, qui cartographie les actifs expos
 
 ## Différenciateurs
 - **Optimisation des scans pilotée par IA** — planification adaptative pondérée par le taux de churn, l'intérêt du tenant et la fraîcheur ; détection d'anomalies sur les profils de services par hôte.
-- **Interface agent conversationnelle** — recherche en langage naturel sur le jeu de données indexé, propulsée par les embeddings `multilingual-e5-small`.
+- **Interface agent conversationnelle** — recherche en langage naturel sur le jeu de données indexé, propulsée par les embeddings `mistral-embed` (API Mistral, sous-traitant EU).
 - **Serveur MCP** — expose des outils de scan, de recherche et de reporting pour que les agents IA des clients automatisent leurs workflows contre Reconaut.
 - **Résidence EU par politique** — bâti autour du principe de responsabilité du RGPD, pas plaqué après coup.
 
 ## Stack (existante et prévue)
 - **Backend** : Python 3.12, async ; FastAPI pour l'API tenant ; aiohttp pour les workers de scan.
 - **Stockage** : Postgres + hypertables TimescaleDB (timeseries de scan) + pgvector (index sémantique) ; stockage objet S3-compatible EU pour le tier froid (fournisseur différé, sujet procurement).
-- **Embeddings** : `multilingual-e5-small` ONNX (384-dim), packagé comme artefact Reconaut dans le build (à ne pas confondre avec les `models/` et `config.json` éventuellement présents dans le working tree, qui appartiennent à un autre projet — `devrag` — et sont git-ignored). Paramètres par défaut : `chunk_size=500`, `top_k=5`.
+- **Embeddings** : `mistral-embed` (API Mistral hébergée en EU, 1024-dim). Mistral est un sous-traitant au sens RGPD Art. 28 ; un DPA et un engagement de résidence intra-EU sont requis avant tout envoi de données. Paramètres par défaut : `chunk_size=500`, `top_k=5`.
 - **Auth** : OIDC ; choix concret de l'IdP différé (le contrat reste identique côté plateforme).
 - **Facturation** : Stripe EU + Stripe Tax (compteurs : scans, appels MCP, dépassements de rétention).
 - **MCP** : SDK Python officiel ; transport **HTTP+SSE uniquement** en v1 (stdio non livré).

@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Semantic Search over Indexed Assets
-L'agent DOIT répondre aux requêtes en langage naturel en récupérant les hôtes et services pertinents via les embeddings `multilingual-e5-small` (384-dim) sur une représentation chunkée des métadonnées d'hôte, des bannières et des certificats. Chaque résultat DOIT citer son enregistrement de scan source pour que l'utilisateur vérifie la provenance.
+L'agent DOIT répondre aux requêtes en langage naturel en récupérant les hôtes et services pertinents via les embeddings `mistral-embed` (API Mistral, 1024-dim) sur une représentation chunkée des métadonnées d'hôte, des bannières et des certificats. Les appels à l'API Mistral DOIVENT cibler le endpoint EU et être encadrés par un DPA Art. 28 (voir spec `gdpr-compliance`). Chaque résultat DOIT citer son enregistrement de scan source pour que l'utilisateur vérifie la provenance.
 
 #### Scenario: Utilisateur cherche les Modbus exposés en France
 - **GIVEN** l'index contient des hôtes avec country=`FR` exposant un service tagué `modbus`
@@ -30,3 +30,23 @@ L'agent DEVRA récupérer uniquement les données que l'utilisateur requérant e
 - **GIVEN** des enregistrements de scan ingérés sous le scope tenant `public`
 - **WHEN** un utilisateur du tenant A interroge
 - **THEN** les enregistrements `public` correspondants sont renvoyés aux côtés des enregistrements privés du tenant A, classés par similarité
+
+### Requirement: Résilience face au fournisseur d'embeddings externe
+Comme l'agent dépend de l'API Mistral externe, l'appel d'embedding DOIT être borné par un timeout par requête, protégé par un circuit breaker, et observable via des métriques. En cas d'indisponibilité du fournisseur, l'agent DOIT échouer explicitement plutôt que de fabriquer des résultats. Une couche d'abstraction `Embedder` DOIT permettre la substitution du fournisseur sans modification du code applicatif.
+
+#### Scenario: API Mistral indisponible
+- **GIVEN** l'API Mistral renvoie 5xx ou time out sur les requêtes d'embedding
+- **WHEN** un utilisateur soumet une requête à l'agent
+- **THEN** l'agent renvoie HTTP 503 avec body `{ "error": "embedding_provider_unavailable" }` ; il ne renvoie ni résultats fabriqués ni résultats issus d'un cache au-delà de l'index sémantique existant
+- **AND** la métrique `embedding_provider_failures_total{provider="mistral"}` incrémente
+
+#### Scenario: Timeout par requête
+- **WHEN** un appel à l'API Mistral dépasse 2,5 s sans réponse
+- **THEN** la connexion est annulée et l'erreur est remontée comme un échec d'embedding ; aucune requête « zombie » ne continue en arrière-plan
+- **AND** la métrique `embedding_provider_latency_seconds` enregistre l'observation tronquée au timeout
+
+#### Scenario: Circuit breaker ouvert
+- **GIVEN** N échecs consécutifs de l'API Mistral sur la fenêtre configurée (défaut N=5 sur 30 s)
+- **WHEN** une nouvelle requête tente un appel
+- **THEN** le circuit breaker est ouvert et l'appel est rejeté immédiatement sans tentative réseau pendant la durée configurée (défaut 60 s)
+- **AND** un log structuré niveau `warn` est émis avec `circuit=open`, `provider=mistral`

@@ -1,7 +1,7 @@
 # Change : init-reconaut-platform
 
 ## Pourquoi
-Reconaut est initialisé comme un SaaS européen conforme RGPD pour la découverte d'actifs internet — un équivalent de Shodan avec l'IA comme capacité de premier ordre (optimisation, agent conversationnel, automatisation MCP). Le dépôt ne contient pour l'instant qu'un `README.md` minimal (les fichiers `config.json`, `models/` et `vectors.db` éventuellement présents dans le working tree appartiennent à un autre projet — `devrag` — et sont git-ignored). Ce change établit les exigences fondatrices à travers six domaines pour que les changes OpenSpec suivants se conçoivent contre une base stable.
+Reconaut est initialisé comme un SaaS européen conforme RGPD pour la découverte d'actifs internet — un équivalent de Shodan avec l'IA comme capacité de premier ordre (optimisation, agent conversationnel, automatisation MCP). Ce change établit les exigences fondatrices à travers six domaines pour que les changes OpenSpec suivants se conçoivent contre une base stable.
 
 C'est volontairement un change de *fondation* : il code la surface contractuelle de la plateforme (ce qu'elle fait, ce qu'elle ne DOIT PAS faire, comment elle est observable) plutôt que d'implémenter une fonctionnalité unique en profondeur. Les fonctionnalités concrètes (par ex. un sondeur de protocole donné, un modèle d'anomalie particulier) feront l'objet de propositions OpenSpec ultérieures.
 
@@ -10,7 +10,7 @@ Le change ajoute des exigences initiales dans six domaines de spec :
 
 1. **scanning** — pipeline de découverte, fingerprinting de ports/services, contrôles d'abus (rate limits, signaux d'opt-out), rétention.
 2. **ai-optimization** — planificateur adaptatif, détection d'anomalies.
-3. **agent-interface** — recherche sémantique avec `multilingual-e5-small`, restriction au tenant, citation de provenance.
+3. **agent-interface** — recherche sémantique avec `mistral-embed` (API Mistral, sous-traitant EU), restriction au tenant, citation de provenance, résilience face aux pannes du fournisseur.
 4. **mcp-server** — surface d'outils MCP (`search_hosts`, `get_host`, `request_scan`, `get_scan_status`, `export_report`), scopes, audit. Transport HTTP+SSE uniquement.
 5. **gdpr-compliance** — résidence des données EU, droit à l'effacement, journal d'audit immuable, exigences multi-région.
 6. **platform** — isolation multi-tenant, OIDC + RBAC.
@@ -19,7 +19,7 @@ Il amorce aussi `openspec/project.md` pour que les changes futurs partagent un d
 
 ## Contraintes
 - Tout traitement et stockage DOIVENT rester dans les juridictions EU/EEE ; aucun transfert vers un pays tiers sans mécanisme Art. 46.
-- Le modèle d'embedding est figé à `multilingual-e5-small` (384-dim) pour la v1 (multilingue, légère, déployable CPU). Reconaut packagera son propre artefact ; aucune dépendance sur des fichiers présents dans le working tree au moment du bootstrap.
+- Le fournisseur d'embeddings est figé à `mistral-embed` (API Mistral, 1024-dim) pour la v1. Mistral devient sous-traitant au sens RGPD Art. 28 ; un DPA EU et un engagement de résidence intra-EU sont requis avant tout envoi de données. L'agent DOIT être codé contre une interface `Embedder` pour qu'un fournisseur alternatif (par ex. self-hosted) puisse être substitué plus tard sans toucher au reste du code.
 - Le scan DOIT respecter les limites de consentement des cibles (opt-out DNS, robots.txt pour les sondes HTTP au-delà de la page d'index) et les rate limits par cible et par AS.
 - L'isolation tenant DOIT être imposée à la couche la plus basse possible (RLS Postgres, partitionnement de queue, préfixe object store) — pas par filtres applicatifs après-coup.
 - L'architecture multi-actif EU implique que toutes ces propriétés (isolation, audit, effacement) DOIVENT tenir simultanément dans chaque région active et survivre à la réplication.
