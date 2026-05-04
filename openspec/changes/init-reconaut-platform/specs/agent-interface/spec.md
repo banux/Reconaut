@@ -8,7 +8,7 @@ L'agent DOIT répondre aux requêtes en langage naturel en récupérant les hôt
 #### Scenario: Utilisateur cherche les Modbus exposés en France
 - **GIVEN** l'index contient des hôtes avec country=`FR` exposant un service tagué `modbus`
 - **WHEN** un utilisateur authentifié soumet la requête « modbus exposés en France » via `POST /agent/chat`
-- **THEN** l'agent renvoie les top-K résultats (K configurable, défaut 5 depuis `config.json`)
+- **THEN** l'agent renvoie les top-K résultats (K configurable, défaut 5)
 - **AND** chaque hôte renvoyé a country=`FR` et au moins un service tagué `modbus`
 - **AND** chaque résultat inclut un couple de citation `(host_id, scanned_at)` référençant l'enregistrement de scan source
 - **AND** le temps de réponse end-to-end P95 sur le chemin chaud est < 2,5 s pour un ensemble de résultats ≤ 50 hôtes

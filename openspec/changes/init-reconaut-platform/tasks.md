@@ -58,9 +58,9 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## 4. Interface agent — spec : `agent-interface`
 
-- [ ] **4.1 Pipeline d'embedding utilisant l'ONNX embarqué**
-  - **Notes** : Charger `models/model.onnx` (multilingual-e5-small). Honorer `chunk_size: 500` et `search_top_k: 5` depuis `config.json`. CPU par défaut ; GPU optionnel via `compute.device`.
-  - **Test plan** : `pytest tests/agent/test_embed.py` assure (a) dim de sortie 384, (b) déterminisme pour la même entrée, (c) accord entre chemin batch et single-item.
+- [ ] **4.1 Pipeline d'embedding `multilingual-e5-small`**
+  - **Notes** : Packager le modèle ONNX `multilingual-e5-small` (384-dim) comme artefact Reconaut dans le build (image conteneur ou volume monté en production). Ne **pas** dépendre des fichiers `models/` ou `config.json` éventuellement présents dans le working tree (ils appartiennent au projet `devrag` et sont git-ignored). Defaults : `chunk_size=500`, `top_k=5`. CPU par défaut ; GPU optionnel via configuration applicative Reconaut.
+  - **Test plan** : `pytest tests/agent/test_embed.py` assure (a) dim de sortie 384, (b) déterminisme pour la même entrée, (c) accord entre chemin batch et single-item, (d) test de smoke qui résout l'artefact via le mécanisme de packaging Reconaut (pas via un chemin relatif `models/...`).
 
 - [ ] **4.2 Vector store avec filtre tenant poussé dans la requête**
   - **Notes** : pgvector avec index HNSW. Le SQL de retrieval applique `WHERE tenant_id IN (:caller, 'public')` directement ; jamais en post-filtre Python.

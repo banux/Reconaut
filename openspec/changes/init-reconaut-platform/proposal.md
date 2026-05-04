@@ -1,7 +1,7 @@
 # Change : init-reconaut-platform
 
 ## Pourquoi
-Reconaut est initialisé comme un SaaS européen conforme RGPD pour la découverte d'actifs internet — un équivalent de Shodan avec l'IA comme capacité de premier ordre (optimisation, agent conversationnel, automatisation MCP). Le dépôt ne contient pour l'instant que `config.json`, `models/model.onnx` et un `README.md` minimal. Ce change établit les exigences fondatrices à travers six domaines pour que les changes OpenSpec suivants se conçoivent contre une base stable.
+Reconaut est initialisé comme un SaaS européen conforme RGPD pour la découverte d'actifs internet — un équivalent de Shodan avec l'IA comme capacité de premier ordre (optimisation, agent conversationnel, automatisation MCP). Le dépôt ne contient pour l'instant qu'un `README.md` minimal (les fichiers `config.json`, `models/` et `vectors.db` éventuellement présents dans le working tree appartiennent à un autre projet — `devrag` — et sont git-ignored). Ce change établit les exigences fondatrices à travers six domaines pour que les changes OpenSpec suivants se conçoivent contre une base stable.
 
 C'est volontairement un change de *fondation* : il code la surface contractuelle de la plateforme (ce qu'elle fait, ce qu'elle ne DOIT PAS faire, comment elle est observable) plutôt que d'implémenter une fonctionnalité unique en profondeur. Les fonctionnalités concrètes (par ex. un sondeur de protocole donné, un modèle d'anomalie particulier) feront l'objet de propositions OpenSpec ultérieures.
 
@@ -19,7 +19,7 @@ Il amorce aussi `openspec/project.md` pour que les changes futurs partagent un d
 
 ## Contraintes
 - Tout traitement et stockage DOIVENT rester dans les juridictions EU/EEE ; aucun transfert vers un pays tiers sans mécanisme Art. 46.
-- Le modèle d'embedding est figé à `multilingual-e5-small` (384-dim) pour matcher `models/model.onnx` et `config.json`.
+- Le modèle d'embedding est figé à `multilingual-e5-small` (384-dim) pour la v1 (multilingue, légère, déployable CPU). Reconaut packagera son propre artefact ; aucune dépendance sur des fichiers présents dans le working tree au moment du bootstrap.
 - Le scan DOIT respecter les limites de consentement des cibles (opt-out DNS, robots.txt pour les sondes HTTP au-delà de la page d'index) et les rate limits par cible et par AS.
 - L'isolation tenant DOIT être imposée à la couche la plus basse possible (RLS Postgres, partitionnement de queue, préfixe object store) — pas par filtres applicatifs après-coup.
 - L'architecture multi-actif EU implique que toutes ces propriétés (isolation, audit, effacement) DOIVENT tenir simultanément dans chaque région active et survivre à la réplication.
