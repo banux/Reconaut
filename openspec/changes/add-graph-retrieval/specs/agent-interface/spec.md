@@ -37,8 +37,8 @@ L'agent DEVRA récupérer uniquement les données que l'utilisateur requérant e
 #### Scenario: Utilisateur du tenant A interroge l'agent
 - **GIVEN** les tenants A et B ont chacun des hôtes privés tagués sur mesure dans l'index ET dans le graphe
 - **WHEN** un utilisateur authentifié comme tenant A soumet une requête quelconque
-- **THEN** la récupération vectorielle est contrainte par `tenant_id IN ('A', 'public')` au niveau de la requête vers l'index vectoriel
-- **AND** chaque template graphe exécuté lie `tenant_id` au caller dans sa clause `WHERE`
+- **THEN** la requête est rejetée avec HTTP 403 avant tout calcul (auth + RBAC) ou exécutée sans filtre tenant si l'utilisateur a le rôle requis (modèle tenant unique)
+- **AND** aucun paramètre `tenant_id` n'est lu ni produit par le pipeline
 - **AND** un test d'intégration exécute ≥ 100 requêtes randomisées du tenant A (mix sémantique et structurel) et assure qu'aucun résultat ne référence un hôte privé du tenant B
 
 #### Scenario: Jeu de données public reste interrogeable

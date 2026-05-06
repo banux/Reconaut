@@ -2,41 +2,50 @@
 
 ## ADDED Requirements
 
-### Requirement: Multi-Tenant Isolation (Opt-In)
-La plateforme DOIT supporter deux modes de déploiement : **single-tenant (défaut)** et **multi-tenant (opt-in via flag de configuration)**. En mode single-tenant, un seul tenant implicite `default` existe ; les UI et API masquent les concepts de tenant ; la RLS est appliquée mais dégénérée à `tenant_id = 'default'`. En mode multi-tenant, l'isolation DOIT être imposée à la couche la plus basse possible — Row-Level Security Postgres, partitionnement de queue, préfixe par tenant sur le stockage objet — et l'accès cross-tenant DOIT être impossible par construction, pas par filtres applicatifs seuls.
+### Requirement: Single-Tenant Data Model
+Reconaut est livré en mode **tenant unique** en v1. Le schéma de données ne comporte AUCUNE notion de tenant : pas de colonne `tenant_id`, pas de RLS par tenant, pas d'UI de gestion de tenants. Une instance = un opérateur = un périmètre d'actifs déclaré. Un MSSP qui veut servir N clients DOIT déployer N instances Reconaut indépendantes.
 
-#### Scenario: Single-tenant — concept de tenant masqué
-- **GIVEN** le mode single-tenant (défaut)
-- **WHEN** un utilisateur authentifié appelle l'API
-- **THEN** les requêtes Postgres incluent `tenant_id = 'default'` (chemin RLS exercé)
-- **AND** l'UI ne propose pas de sélecteur de tenant
-- **AND** l'API rejette tout body comportant un `tenant_id` autre que `default` ou non spécifié
+#### Scenario: Schéma DB sans colonne tenant_id
+- **GIVEN** le schéma Postgres après les migrations initiales
+- **WHEN** un linter de schéma s'exécute
+- **THEN** aucune table métier (`hosts`, `services`, `certificates`, `scopes`, `scans`, `audit_log`, etc.) ne contient de colonne `tenant_id` ou équivalent
 
-#### Scenario: Multi-tenant — tentative d'accès API cross-tenant
-- **GIVEN** le mode multi-tenant est activé et un utilisateur authentifié comme tenant A
-- **WHEN** cet utilisateur émet `GET /hosts/{id}` pour un `host_id` appartenant au tenant B
-- **THEN** l'API renvoie HTTP 404 (pas 403) pour ne pas divulguer l'existence de la ligne
-- **AND** un test d'intégration de 1000 appels confirme une variance de timing < 10 ms vs requêtes pour des IDs inexistants (pas d'oracle temporel)
+#### Scenario: API rejette tout paramètre de tenant
+- **GIVEN** une instance Reconaut déployée
+- **WHEN** un client envoie une requête avec un paramètre `tenant_id` ou un header `X-Tenant`
+- **THEN** l'API renvoie HTTP 400 avec body `{ "error": "tenant_param_unsupported" }`
 
-#### Scenario: Multi-tenant — isolation par préfixe object store
-- **GIVEN** le mode multi-tenant et les tenants A et B exportant tous deux des rapports
-- **WHEN** le job d'export écrit dans le stockage objet
-- **THEN** les objets du tenant A sont écrits sous le préfixe `t-A/...` avec une bucket policy refusant l'accès à tout rôle hors du scope IAM du tenant A
+#### Scenario: UI ne propose pas de sélecteur de tenant
+- **WHEN** un opérateur authentifié charge l'application web
+- **THEN** aucun composant UI ne propose de basculer entre des tenants ; les concepts de tenant n'apparaissent ni dans la navigation ni dans les paramètres
 
 ### Requirement: Authentication and RBAC
-Les utilisateurs DOIVENT s'authentifier soit via **OIDC** (Keycloak, Authentik, Dex, etc.) **soit via un mécanisme local** (utilisateur/mot de passe Argon2id + clés API personnelles hashées). Le choix se fait au déploiement par configuration ; les deux modes peuvent coexister. Les rôles `owner`, `admin`, `analyst`, `viewer` et `mcp_client` DOIVENT être imposés côté serveur sur chaque endpoint et chaque outil MCP, indépendamment du mode d'authentification.
+L'authentification DOIT être **local-first** : tout déploiement de Reconaut DOIT supporter l'authentification locale (utilisateur/mot de passe Argon2id + clés API personnelles hashées) **sans dépendance externe**, et cette voie DOIT rester disponible et fonctionnelle indéfiniment, même si un IdP externe est configuré. **OIDC** (Keycloak, Authentik, Dex, etc.) PEUT être activé en parallèle par configuration ; les deux mécanismes coexistent. L'instance NE DOIT JAMAIS exiger un IdP externe pour démarrer ou pour permettre la connexion d'un opérateur. Les rôles `owner`, `admin`, `analyst`, `viewer` et `mcp_client` DOIVENT être imposés côté serveur sur chaque endpoint et chaque outil MCP, indépendamment du mécanisme d'authentification.
 
-#### Scenario: Auth locale par défaut
-- **GIVEN** une instance fraîchement déployée sans configuration OIDC
-- **WHEN** l'opérateur initial complète le bootstrap
+#### Scenario: Bootstrap initial sans IdP externe
+- **GIVEN** une instance fraîchement déployée, sans configuration OIDC
+- **WHEN** l'opérateur initial complète le bootstrap (par ex. première visite UI ou commande CLI)
 - **THEN** un compte `owner` local est créé avec un mot de passe défini à l'enrôlement
 - **AND** ce compte peut générer une clé API personnelle et l'utiliser pour appeler l'API et MCP
+- **AND** aucune connexion sortante vers un IdP externe n'a lieu pendant le bootstrap
+
+#### Scenario: Auth locale reste utilisable après activation d'OIDC
+- **GIVEN** une instance avec des comptes locaux existants
+- **WHEN** l'opérateur configure et active un IdP OIDC
+- **THEN** les comptes locaux préexistants restent valides et peuvent toujours se connecter
+- **AND** les clés API personnelles déjà émises continuent de fonctionner sans rotation forcée
 
 #### Scenario: OIDC activé en parallèle
 - **GIVEN** l'opérateur a configuré un IdP OIDC (par ex. Keycloak)
 - **WHEN** un utilisateur s'authentifie via OIDC
 - **THEN** son JWT est vérifié à chaque requête, le claim de rôle drive l'autorisation
-- **AND** les comptes locaux préexistants restent valides ; les deux mécanismes coexistent
+- **AND** les deux mécanismes coexistent et peuvent être utilisés par des utilisateurs distincts ou par le même utilisateur
+
+#### Scenario: Panne de l'IdP externe ne bloque pas l'instance
+- **GIVEN** un IdP OIDC est configuré et tombe (réseau coupé, IdP down)
+- **WHEN** un opérateur tente de se connecter avec un compte local ou une clé API personnelle
+- **THEN** la connexion réussit ; l'instance reste pleinement opérationnelle pour les utilisateurs locaux
+- **AND** seules les nouvelles connexions OIDC échouent avec un message explicite
 
 #### Scenario: Viewer tente de déclencher un scan
 - **GIVEN** un utilisateur avec le rôle `viewer` (peu importe le mécanisme d'auth)
@@ -48,3 +57,17 @@ Les utilisateurs DOIVENT s'authentifier soit via **OIDC** (Keycloak, Authentik, 
 - **GIVEN** un utilisateur avec le rôle `owner`
 - **WHEN** l'utilisateur accorde le rôle `analyst` à un autre utilisateur
 - **THEN** le changement prend effet en moins de 60 secondes sur tous les services et est reflété dans le journal d'audit
+
+### Requirement: Storage Without Object Store
+La plateforme NE DOIT PAS dépendre d'un stockage objet S3-compatible (S3, MinIO, Azure Blob, GCS, etc.) en v1. Les artefacts générés par la plateforme (exports de rapport, dumps de scope, archives de tier froid, etc.) DOIVENT être persistés soit (a) dans un volume filesystem local monté sur l'instance, soit (b) comme blobs Postgres (`bytea` ou `lob`), au choix selon la nature du payload. Cette contrainte préserve le caractère self-hostable de l'instance sans dépendance d'infrastructure cloud.
+
+#### Scenario: Export de rapport écrit en filesystem
+- **GIVEN** un opérateur déclenche un export `format=csv` via l'API
+- **WHEN** Rails matérialise le rapport
+- **THEN** le fichier est écrit sous `/var/lib/reconaut/exports/<uuid>.csv` (ou chemin équivalent monté en volume)
+- **AND** l'URL de téléchargement renvoyée est servie par Rails (téléchargement authentifié), pas une URL signée S3
+
+#### Scenario: Aucune dépendance S3 dans le déploiement
+- **GIVEN** la configuration de déploiement de référence (`docker-compose.yml`, chart Helm)
+- **WHEN** un linter scanne les services et les variables d'env
+- **THEN** aucun service S3/MinIO/Azure Blob n'est référencé ; aucune variable `S3_*` / `AWS_*` / `MINIO_*` n'est requise pour démarrer

@@ -87,7 +87,7 @@ Arêtes intéressantes pour les requêtes :
 
 - **GDPR / effacement** : la cohérence DSAR exige que la suppression d'un tenant retire les nœuds *et* les arêtes du graphe. Avec AGE = même transaction Postgres que la suppression des lignes scalaires → cohérence triviale. Avec Neo4j séparé = workflow de suppression distribué à concevoir + tester (`gdpr-compliance` deviendrait plus complexe).
 - **Audit** : les requêtes Cypher générées par LLM doivent être journalisées (texte de la requête, durée, nombre de nœuds touchés). Risque d'injection Cypher = LLM peut générer des requêtes destructives (`DETACH DELETE`). Mitigation : runtime read-only pour les requêtes d'agent, allowlist de patterns Cypher, ou DSL restreint plutôt que Cypher brut.
-- **Stack** : AGE = extension Postgres → s'installe via `CREATE EXTENSION age`, pas de service supplémentaire à déployer. Cohérent avec le change `add-tech-stack` (Rails monolithe + workers Rust). Côté Rails, gem `activerecord-age` ou requêtes brutes via `ActiveRecord::Base.connection.execute`.
+- **Stack** : AGE = extension Postgres → s'installe via `CREATE EXTENSION age`, pas de service supplémentaire à déployer. Cohérent avec le change `add-tech-stack` (Rails 8 monolithe + workers Go + GoodJob). Côté Rails, gem `activerecord-age` ou requêtes brutes via `ActiveRecord::Base.connection.execute`.
 - **Coût** : zéro coût marginal Mistral pour la construction du graphe (vs MS GraphRAG qui coûte des centaines de dollars en tokens pour un corpus moyen). Coût LLM uniquement à la requête, comme aujourd'hui.
 
 ## 7. Recommandation

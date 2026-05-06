@@ -8,22 +8,22 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 - [ ] **1.1 Application de la licence AGPL-3.0-only**
   - **Notes** : Décision actée (cf. `proposal.md` §Décisions prises §1) — pas de vocation commerciale, AGPL protège contre la ré-hébergement managé fermé sans réciprocité. Intégrer le texte intégral d'AGPL-3.0 dans `LICENSE` à la racine, ajouter `SPDX-License-Identifier: AGPL-3.0-only` en en-tête de chaque fichier source. Rédiger un ADR court `docs/adr/0001-license.md` qui consigne la décision (contexte, options écartées Apache-2.0/BUSL-1.1, conséquences). Vérifier la compatibilité de licence des dépendances (transitives incluses) — refuser toute dépendance dont la licence est incompatible avec AGPL côté sortie.
-  - **Test plan** : `licensee detect .` renvoie `AGPL-3.0-only` ; un check CI échoue si un fichier source n'a pas l'en-tête SPDX attendu ; un audit `bundle-audit` / `cargo-deny` / `pnpm licenses ls` confirme zéro dépendance avec licence incompatible.
+  - **Test plan** : `licensee detect .` renvoie `AGPL-3.0-only` ; un check CI échoue si un fichier source n'a pas l'en-tête SPDX attendu ; un audit `bundle-audit` / `go-licenses check` / `pnpm licenses ls` confirme zéro dépendance avec licence incompatible.
 
 - [ ] **1.2 Politique de contribution (DCO + Code of Conduct)**
   - **Notes** : Ajouter `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), workflow GitHub Action `dco-check` qui rejette les PR sans `Signed-off-by:` valide.
   - **Test plan** : Une PR sans sign-off est rejetée par le check DCO ; une PR avec sign-off passe.
 
-- [ ] **1.3 Politique de télémétrie opt-in fail-closed**
-  - **Notes** : Documenter dans `docs/operating/telemetry.md` : (a) liste exhaustive des champs jamais collectés sans consentement, (b) liste des champs collectés *si* opt-in, (c) endpoint de réception, (d) mécanisme de désactivation après opt-in. Le code DOIT fail closed (rien n'est envoyé tant que l'opérateur n'a pas explicitement coché l'opt-in).
-  - **Test plan** : Test d'intégration boote l'instance avec config par défaut → 0 requête sortante vers un endpoint de télémétrie observée. Avec `telemetry.enabled=true` → un payload anonymisé est envoyé au prochain tick.
+- [ ] **1.3 Pas de SDK d'analytics tiers ; OpenTelemetry contrôlé par l'opérateur**
+  - **Notes** : Aucun client d'analytics tiers dans le code. Le linter de stack rejette tout import de gem ou package de type Mixpanel, Segment, Amplitude, PostHog, Plausible (server SDK), Matomo. Pas d'endpoint codé en dur vers un service projet. Côté instrumentation : OpenTelemetry est intégré (traces + métriques + logs structurés) avec exporter OTLP, mais SANS destination par défaut — l'opérateur définit `OTEL_EXPORTER_OTLP_ENDPOINT` lui-même pour pointer vers son collecteur.
+  - **Test plan** : (a) Test grep CI : aucun import des SDK d'analytics listés ; échec si introduction. (b) Test d'audit réseau : boot avec config par défaut sans variable OTel → 0 connexion sortante vers un endpoint OTel public ou un endpoint d'analytics. (c) Test d'intégration : configurer `OTEL_EXPORTER_OTLP_ENDPOINT` vers un collecteur de test → traces et métriques apparaissent dans le collecteur ; aucune autre destination n'est touchée.
 
 - [ ] **1.4 Layout monorepo**
-  - **Notes** : Structure cible (alignée avec `add-tech-stack`) : `apps/api/` (Rails monolithe — API, agent, MCP, audit), `apps/web/` (Vue 3 + Vite), `apps/scanner/` (workers Rust), `packages/job-schema/` (schémas de message versionnés), `Dockerfile` par app, `docker-compose.yml` racine pour le dev local et déploiement simple.
-  - **Test plan** : `bin/setup` racine installe Ruby, Node, Rust ; `bin/test` exécute en parallèle `bundle exec rspec`, `pnpm test`, `cargo test` ; chaque suite contient un test smoke qui passe.
+  - **Notes** : Structure cible (alignée avec `add-tech-stack`) : `apps/api/` (Rails 8 monolithe — API, agent, MCP, audit), `apps/web/` (Vue 3 + Vite), `apps/scanner/` (workers Go), `packages/job-schema/` (schémas de message versionnés), `Dockerfile` par app, `docker-compose.yml` racine pour le dev local et déploiement simple.
+  - **Test plan** : `bin/setup` racine installe Ruby, Node, Go ; `bin/test` exécute en parallèle `bundle exec rspec`, `pnpm test`, `go test ./...` ; chaque suite contient un test smoke qui passe.
 
 - [ ] **1.5 Pipeline CI multi-stack (GitHub Actions)**
-  - **Notes** : Jobs séparés par app : `api-rubocop`, `api-rspec`, `web-eslint`, `web-vitest`, `scanner-clippy`, `scanner-cargo-test`, build d'image par app. Cache des dépendances (Bundler, pnpm, cargo) keyé par lockfile.
+  - **Notes** : Jobs séparés par app : `api-rubocop`, `api-rspec`, `web-eslint`, `web-vitest`, `scanner-golangci-lint`, `scanner-go-test`, build d'image par app. Cache des dépendances (Bundler, pnpm, Go module cache `~/go/pkg/mod`) keyé par lockfile.
   - **Test plan** : Ouvrir une PR triviale, tous les jobs verts ; introduire une violation volontaire (lint, type) et vérifier que le job correspondant échoue.
 
 ---
@@ -34,7 +34,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Notes** : Modèles `Host`, `Service`, `Scan`, `ScanScopeEntry` (avec colonnes `id`, `kind` ∈ `{cidr, domain, host}`, `value`, `description`, `created_by`, `created_at`, `revoked_at`). Hypertable TimescaleDB sur `services(scanned_at)` avec chunks journaliers ; pg_partman pour la rétention.
   - **Test plan** : `bundle exec rspec spec/models/scan_scope_entry_spec.rb` couvre la validation des trois `kind`, le rejet des CIDR invalides, l'historisation. `spec/models/host_spec.rb` assure que l'hypertable est créée et qu'une politique de rétention 90 jours est attachée.
 
-- [ ] **2.2 Garde de scope dans le worker Rust**
+- [ ] **2.2 Garde de scope dans le worker Go**
   - **Notes** : Avant chaque sonde, le worker vérifie que la cible appartient à au moins une entrée de scope active (résolution DNS pour les `domain` faite au moment du scan). Cible hors scope → job rejeté avec raison `out-of-scope`, ligne d'audit, pas de paquet réseau émis.
   - **Test plan** : Test d'intégration injecte un job pour `203.0.113.5` sans entrée de scope ; assure (a) aucun paquet sortant, (b) statut `out-of-scope` persisté, (c) ligne d'audit. Un job pour `192.0.2.10` avec une entrée de scope `192.0.2.0/24` active passe.
 
@@ -51,8 +51,8 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Replay d'un corpus de réponses embarqué pour chaque protocole ; assurer que les champs parsés matchent les snapshots golden au byte près.
 
 - [ ] **2.6 Moteur de rétention**
-  - **Notes** : Job nocturne : migration chaud→froid à 90 jours (défaut), surcharge opérateur honorée. Tier froid sur stockage objet S3-compatible (fournisseur configurable, MinIO local par défaut pour dev).
-  - **Test plan** : Test d'intégration qui sème des lignes vieilles de >90 jours, lance le job, assure que les lignes sont présentes dans le préfixe froid et absentes de la table chaude ; avec surcharge `hot_days=365`, les mêmes lignes restent en chaud.
+  - **Notes** : Job nocturne : migration chaud→froid à 90 jours (défaut), surcharge opérateur honorée. Tier froid soit en chunks Timescale compressés (défaut, `cold_tier.backend=postgres_compressed`), soit en fichiers JSONL.gz sur le filesystem local (`cold_tier.backend=filesystem`, chemin configurable). Pas de stockage objet S3-compatible.
+  - **Test plan** : Test d'intégration qui sème des lignes vieilles de >90 jours, lance le job avec `cold_tier.backend=postgres_compressed`, assure que les lignes sont dans des chunks Timescale compressés et absentes des chunks chauds. Test additionnel avec `cold_tier.backend=filesystem` : assure que les lignes sont exportées en `.jsonl.gz` dans le chemin configuré et supprimées du tier chaud. Avec surcharge `hot_days=365`, les lignes <365j restent en chaud.
 
 ---
 
@@ -75,16 +75,16 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 ## 4. Interface agent — spec : `agent-interface`
 
 - [ ] **4.1 Interface `Embedder` formalisée**
-  - **Notes** : Module Ruby `Reconaut::Embedder` (interface) avec méthode `embed(texts: Array<String>) -> Array<Array<Float>>`. Trois implémentations livrées : (a) `LocalEmbedder` (modèle ONNX/llama.cpp embarqué — choix concret du modèle différé), (b) `MistralEmbedder`, (c) `OpenAICompatibleEmbedder` générique.
-  - **Test plan** : Test contractuel commun aux trois implémentations vérifie : (i) dim de sortie cohérente avec la config, (ii) déterminisme batch vs single-item à epsilon près, (iii) timeout et erreur explicite quand le backend est indisponible. Test additionnel : un mock outbound assure que `LocalEmbedder` n'effectue **aucun appel réseau**.
+  - **Notes** : Module Ruby `Reconaut::Embedder` (interface) avec méthode `embed(texts: Array<String>) -> Array<Array<Float>>`. Quatre implémentations livrées : (a) `LocalEmbedder` (modèle ONNX/llama.cpp embarqué in-process — choix du modèle différé), (b) `OllamaEmbedder` (parle l'API Ollama sur l'URL configurée), (c) `MistralEmbedder`, (d) `OpenAICompatibleEmbedder` générique.
+  - **Test plan** : Test contractuel commun aux quatre implémentations vérifie : (i) dim de sortie cohérente avec la config, (ii) déterminisme batch vs single-item à epsilon près, (iii) timeout et erreur explicite quand le backend est indisponible. Test additionnel : un mock outbound assure que `LocalEmbedder` n'effectue **aucun appel réseau**. Pour `OllamaEmbedder`, un test contre un container `ollama/ollama` éphémère vérifie l'intégration end-to-end.
 
-- [ ] **4.2 Configuration au déploiement**
-  - **Notes** : Variable d'environnement / fichier YAML `embedder.provider=local|mistral|openai-compatible`, avec sous-options par provider. Défaut : `local`. La config est validée au boot ; un provider mal configuré (clé manquante en `mistral`) fait échouer le boot avec un message clair.
-  - **Test plan** : Test paramétré qui boote l'app avec chaque combinaison et assure (a) défaut sans config = `local`, (b) `mistral` sans clé = exit non-zero `embedder-misconfigured`, (c) `openai-compatible` avec URL custom appelle bien cette URL (via mock).
+- [ ] **4.2 Configuration par variables d'environnement**
+  - **Notes** : Variables 12-factor uniquement (pas de fichier YAML pour la sélection du provider). `RECONAUT_EMBEDDER_PROVIDER=local|ollama|mistral|openai-compatible` (défaut `local`). Variables spécifiques par provider : `RECONAUT_EMBEDDER_LOCAL_MODEL`, `RECONAUT_EMBEDDER_OLLAMA_URL` + `RECONAUT_EMBEDDER_OLLAMA_MODEL`, `RECONAUT_EMBEDDER_MISTRAL_API_KEY`, `RECONAUT_EMBEDDER_OPENAI_BASE_URL` + `RECONAUT_EMBEDDER_OPENAI_API_KEY` + `RECONAUT_EMBEDDER_OPENAI_MODEL`. La config est validée au boot ; un provider mal configuré (clé manquante en `mistral`, URL manquante en `ollama`) fait échouer le boot avec un message clair.
+  - **Test plan** : Test paramétré qui boote l'app avec chaque combinaison et assure (a) défaut sans variable = `local`, (b) `ollama` sans URL = exit non-zero `embedder-misconfigured`, (c) `ollama` avec URL pointant vers un container test = appels réussis, (d) `mistral` sans clé = exit non-zero, (e) `openai-compatible` avec URL custom appelle bien cette URL (via mock).
 
-- [ ] **4.3 Vector store avec filtre tenant poussé dans la requête**
-  - **Notes** : pgvector avec index HNSW. Le SQL de retrieval applique `WHERE tenant_id = ...` directement (en mode single-tenant : `tenant_id = 'default'` ; en mode multi-tenant : `tenant_id IN (:caller, 'public')`). Jamais en post-filtre Ruby.
-  - **Test plan** : (single-tenant) inspecter le SQL généré et vérifier la présence du filtre. (multi-tenant) lancer 100 requêtes randomisées du tenant A contre un corpus mêlant tenants A, B, public ; assurer qu'aucun résultat ne référence un enregistrement privé du tenant B.
+- [ ] **4.3 Vector store avec contrôle d'accès par auth (pas de tenant)**
+  - **Notes** : pgvector avec index HNSW. Modèle tenant unique : pas de filtre `tenant_id` dans le SQL. Le contrôle d'accès au vector store est porté par l'authentification + RBAC (un viewer ne peut pas appeler `/agent/chat`, un analyst peut, etc.).
+  - **Test plan** : Test paramétré par rôle exerce `/agent/chat` ; assure que `viewer` est rejeté avec 403 et que `analyst`/`admin`/`owner` ont accès aux résultats vectoriels.
 
 - [ ] **4.4 Endpoint chat `POST /agent/chat`**
   - **Notes** : Streaming SSE via `ActionController::Live`. Chaque item de résultat porte la citation `(host_id, scanned_at)`. Résultats vides renvoient un message explicite « pas de match ».
@@ -103,8 +103,8 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : `spec/mcp/tools_spec.rb` exerce chaque outil sur un transport HTTP+SSE in-process, assurant que la réponse matche le schema JSON déclaré. Test additionnel qui assure qu'aucun binaire de la plateforme n'expose un point d'entrée stdio MCP (`grep`/scan d'imports).
 
 - [ ] **5.2 `request_scan` rejette les cibles hors scope**
-  - **Notes** : L'outil valide les paramètres, vérifie le scope (réutilise la même garde que le worker Rust), écrit une ligne d'audit et publie un message `ScanJobV1` sur la file. Renvoie immédiatement le `scan_id` ou erreur structurée `out-of-scope`.
-  - **Test plan** : Test d'intégration appelle `request_scan` avec une cible dans le scope ; assure (a) `scan_id` renvoyé en < 100 ms, (b) message publié sur le `JobBus` in-memory. Test négatif : cible hors scope → erreur `out-of-scope`, aucun message publié, ligne d'audit.
+  - **Notes** : L'outil valide les paramètres, vérifie le scope (réutilise la même garde que le worker Go), écrit une ligne d'audit et enqueue un `ScanJob` via GoodJob. Renvoie immédiatement le `scan_id` ou erreur structurée `out-of-scope`.
+  - **Test plan** : Test d'intégration appelle `request_scan` avec une cible dans le scope ; assure (a) `scan_id` renvoyé en < 100 ms, (b) job présent en table `good_jobs`. Test négatif : cible hors scope → erreur `out-of-scope`, aucun job enqueued, ligne d'audit.
 
 - [ ] **5.3 Application des scopes**
   - **Notes** : Table de scopes par clé API (au moins `read:hosts`, `write:scans`, `read:reports`, `manage:scopes`) ; middleware rejette avec erreur MCP structurée contenant le nom du scope manquant.
@@ -127,7 +127,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Test boote avec `allowed_regions=["self-hosted-rack-1"]` → succès, valeur loguée. Test avec liste vide → exit non-zero `data-residency-not-configured`. Test Terraform avec une réplication source EU → destination hors-liste rejeté à `terraform plan`.
 
 - [ ] **6.2 Workflow d'effacement par sujet (outil opérateur)**
-  - **Notes** : UI + API permettant à l'opérateur d'effacer toutes les données liées à un identifiant (IP, domaine, host_id, tenant_id en mode multi-tenant). Effacement transactionnel : OLTP + index vectoriel + tier froid (si configuré) + tombstone audit. Pas de validation de « contrôle de la cible » : c'est l'opérateur qui décide qui mérite l'effacement, sa propre conformité dicte la procédure interne.
+  - **Notes** : UI + API permettant à l'opérateur d'effacer toutes les données liées à un identifiant (IP, domaine, `host_id`). Effacement transactionnel : OLTP + index vectoriel + graphe (si actif) + tier froid (Postgres compressé ou filesystem) + tombstone audit. Pas de validation de « contrôle de la cible » : c'est l'opérateur qui décide qui mérite l'effacement, sa propre conformité dicte la procédure interne.
   - **Test plan** : Test e2e crée des données pour un identifiant, exécute l'effacement, assure (a) absence de l'identifiant dans toutes les couches en moins de 1 transaction, (b) tombstone hashée écrite dans le journal d'audit.
 
 - [ ] **6.3 Journal d'audit append-only**
@@ -138,13 +138,13 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## 7. Plateforme — spec : `platform`
 
-- [ ] **7.1 Flag de déploiement `multi_tenant.enabled`**
-  - **Notes** : Quand `false` (défaut), un seul tenant implicite `default` existe ; les UI et API masquent les concepts de tenant ; la RLS est dégénérée à `tenant_id = 'default'`. Quand `true`, le mode multi-tenant complet est activé (RLS, isolation queue, préfixe object store).
-  - **Test plan** : Test paramétré boote l'app dans les deux modes ; assure (a) en single-tenant, l'UI ne montre pas de sélecteur de tenant et l'API rejette les body comportant `tenant_id` étranger, (b) en multi-tenant, sonde cross-tenant (1000 appels) renvoie 404 pour IDs existants-d'autre-tenant et IDs inexistants ; variance de timing < 10 ms.
+- [ ] **7.1 Modèle tenant unique vérifié**
+  - **Notes** : Schéma DB sans colonne `tenant_id` sur les tables métier (`hosts`, `services`, `certificates`, `scopes`, `scans`, `audit_log`, etc.). UI sans concept de tenant. API rejette tout paramètre `tenant_id` ou header `X-Tenant`.
+  - **Test plan** : Linter de schéma vérifie l'absence de colonne `tenant_id` ; test API qui envoie `{ "tenant_id": "x" }` à un endpoint reçoit 400 `tenant_param_unsupported` ; revue manuelle de l'UI confirme l'absence de sélecteur de tenant.
 
-- [ ] **7.2 Authentification : OIDC ET auth locale**
-  - **Notes** : Auth locale (`devise` ou équivalent ; mots de passe Argon2id, clés API hashées en base, rotation) comme défaut. OIDC activable en parallèle. La couche d'auth est codée contre l'interface OIDC standard pour qu'un IdP soit substituable sans changer le code applicatif.
-  - **Test plan** : Test e2e crée un compte local, génère une clé API, l'utilise pour appeler l'API et MCP ; assure que la révocation invalide la clé immédiatement. Test additionnel monte un IdP fake conforme OIDC pour vérifier que l'app ne dépend d'aucune extension propriétaire.
+- [ ] **7.2 Authentification local-first, OIDC optionnel**
+  - **Notes** : Auth locale (`devise` ou équivalent ; mots de passe Argon2id, clés API hashées en base, rotation) **toujours disponible et active par défaut**. Aucun IdP externe requis pour bootstrapper l'instance. OIDC activable en parallèle par configuration ; la couche d'auth est codée contre l'interface OIDC standard pour qu'un IdP soit substituable sans changer le code applicatif. Si OIDC tombe, l'auth locale doit continuer de servir.
+  - **Test plan** : Test e2e (a) bootstrap d'une instance sans config OIDC, création d'un compte `owner` local, génération de clé API, appel API + MCP avec la clé ; assurer zéro connexion sortante pendant tout le test (mock outbound). (b) Activer OIDC en runtime ; assurer que les comptes locaux préexistants se connectent toujours. (c) Couper l'IdP OIDC pendant qu'il est configuré ; assurer que l'auth locale reste fonctionnelle. (d) Test additionnel monte un IdP fake conforme OIDC pour vérifier que l'app ne dépend d'aucune extension propriétaire.
 
 - [ ] **7.3 Application des rôles**
   - **Notes** : Rôles `owner`, `admin`, `analyst`, `viewer`, `mcp_client`. Chaque endpoint et chaque outil MCP imposent le rôle requis côté serveur.
@@ -163,7 +163,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Chaque release publiée a un asset `sbom-<image>-vX.Y.Z.cdx.json` ; `cosign verify --certificate-identity-regexp ...` réussit sur chaque image release ; un check CI échoue si l'asset SBOM ou la signature manquent.
 
 - [ ] **8.3 Chart Helm et docker-compose de référence**
-  - **Notes** : Chart Helm sous `deploy/helm/reconaut` avec valeurs par défaut sécurisées (single-tenant, télémétrie off, embedder local). `docker-compose.yml` à la racine pour le dev local et les déploiements simples.
+  - **Notes** : Chart Helm sous `deploy/helm/reconaut` avec valeurs par défaut sécurisées (embedder local, auth locale, sans OIDC). `docker-compose.yml` à la racine pour le dev local et les déploiements simples (Postgres + Rails + scanner Go ; pas de Redis, pas de MinIO, pas d'Ollama imposé — Ollama est un override opt-in dans un compose.override.yml d'exemple).
   - **Test plan** : `helm install reconaut ./deploy/helm/reconaut --dry-run` produit un manifest valide ; `docker compose up -d` démarre la stack et le healthcheck `/healthz` répond 200 en moins de 60 s.
 
 - [ ] **8.4 Linter no-billing-no-feature-gate**
@@ -171,7 +171,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Le linter passe propre sur HEAD. Test : ajouter `gem "stripe"` au Gemfile → le linter échoue. Test : ajouter `if ENV["RECONAUT_LICENSE_KEY"]` dans un controller → le linter échoue.
 
 - [ ] **8.5 Boot air-gapped vérifié**
-  - **Notes** : Test e2e qui démarre la stack en réseau privé (sans gateway internet sortant) avec config par défaut + MinIO local + IdP local. Aucun appel sortant ne doit être tenté pendant un cycle d'usage de référence (ajout de scope, scan, recherche agent, appel MCP).
+  - **Notes** : Test e2e qui démarre la stack en réseau privé (sans gateway internet sortant) avec config par défaut (embedder local, auth locale, pas d'OIDC public). Aucun appel sortant ne doit être tenté pendant un cycle d'usage de référence (ajout de scope, scan, recherche agent, appel MCP).
   - **Test plan** : Test réseau audite les sockets sortants pendant 10 minutes sous trafic synthétique ; assure zéro connexion vers une IP publique.
 
 ---
@@ -201,6 +201,6 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 - [ ] Une instance auto-hébergée démarre via `docker compose up -d` sans aucune clé API externe configurée et reste pleinement fonctionnelle (scan, agent, MCP) avec l'embedder local.
 - [ ] Aucun appel sortant n'est observable depuis une instance fraîchement bootée avec config par défaut (vérifié par un test réseau qui audite les sockets ouverts pendant 10 minutes).
 - [ ] Le scanner refuse en dur toute cible hors scope déclaré (test rouge avec une cible non-scope, statut `out-of-scope`, zéro paquet réseau).
-- [ ] Le mode single-tenant est le défaut ; activer le mode multi-tenant nécessite un flag explicite et fait passer la suite de tests d'isolation cross-tenant.
+- [ ] Le modèle tenant unique est imposé : aucune colonne `tenant_id` dans les migrations, l'API rejette tout paramètre de tenant, l'UI n'expose pas de sélecteur.
 - [ ] Une release publique a été produite avec image OCI multi-arch signée et SBOM CycloneDX attaché.
-- [ ] Une commande de self-check documentée (`bin/doctor` ou `rails reconaut:doctor`) imprime région, défauts de rétention, fingerprint du modèle d'embedding actif (local ou externe), posture TLS MCP et politiques d'isolation tenant.
+- [ ] Une commande de self-check documentée (`bin/doctor` ou `rails reconaut:doctor`) imprime région, défauts de rétention, fingerprint du provider d'embedding actif (local / Ollama / Mistral / OpenAI-compatible), posture TLS MCP, taille de la file `good_jobs`.

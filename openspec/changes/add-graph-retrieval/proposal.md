@@ -32,10 +32,9 @@ Ce change formalise l'adoption d'une couche de retrieval graphe **complémentair
 - **Apache AGE sur le cluster Postgres existant**, pas de nouveau moteur graphe (Neo4j, Memgraph, Kuzu) en v1. Justifications cumulées : (a) la RLS Postgres exigée par `platform/spec.md` s'applique sans réécriture, (b) la réplication multi-actif EU passe par le WAL Postgres déjà spécifié (cible p99 < 5 s), (c) la suppression DSAR reste une transaction unique, (d) pas de nouveau sous-traitant Art. 28 à contractualiser.
 - **Pas de Cypher généré par LLM**. Le LLM ne fait que choisir un `template_id` et fournir des paramètres typés. Le code applicatif Rails exécute le Cypher du template avec les paramètres bindés (équivalent paramétré à un prepared statement). Toute requête hors catalogue DOIT être refusée.
 - **Templates en lecture seule**. Le rôle Postgres utilisé pour exécuter les templates n'a pas le droit `CREATE`/`DROP`/`MATCH ... DETACH DELETE`/écriture sur les labels graphe. Les templates qui muteraient le graphe sont rejetés à l'enregistrement.
-- **Filtre tenant poussé dans la requête**, comme pour le vector store : chaque template DOIT lier `tenant_id` au caller (et `'public'` si applicable) dans la clause Cypher. Pas de post-filtre applicatif.
-- **Pas d'extraction LLM à l'index**. Le graphe est dérivé déterministiquement des données de scan structurées. Aucun token Mistral consommé pour la construction.
-- **Multi-actif EU** : le graphe DOIT être interrogeable dans chaque région EU active avec la même cohérence et le même retard de réplication que le reste de l'OLTP.
-- **Cohérent avec `add-tech-stack`** : l'exécution des templates vit dans le process Rails (pas de microservice graphe). Les workers Rust ne touchent pas au graphe — ils publient des résultats de scan structurés que l'ingestion Rails projette en nœuds/arêtes.
+- **Pas d'extraction LLM à l'index**. Le graphe est dérivé déterministiquement des données de scan structurées. Aucun token d'embedder externe consommé pour la construction.
+- **Cohérent avec `add-tech-stack`** : l'exécution des templates vit dans le process Rails (pas de microservice graphe). Les workers Go ne touchent pas au graphe — ils écrivent des résultats de scan structurés (via GoodJob ou directement en DB) que l'ingestion Rails projette en nœuds/arêtes.
+- **Cohérent avec le modèle tenant unique** (cf. spec `platform`) : pas de filtre `tenant_id` dans les templates Cypher. Le contrôle d'accès est porté par l'authentification + RBAC.
 
 ## Non-objectifs (hors scope de ce change)
 

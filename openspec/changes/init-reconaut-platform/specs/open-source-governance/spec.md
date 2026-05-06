@@ -14,7 +14,7 @@ Le code source DOIT être distribué sous **GNU AGPL-3.0-only**, déclarée dans
 
 #### Scenario: Dépendances incompatibles refusées
 - **GIVEN** une PR qui ajoute une dépendance sous licence incompatible avec AGPL en sortie (par ex. propriétaire fermée, ou clause de non-redistribution)
-- **WHEN** le check de licence des dépendances s'exécute (`bundle-audit`, `cargo-deny`, `pnpm licenses`)
+- **WHEN** le check de licence des dépendances s'exécute (`bundle-audit`, `go-licenses check`, `pnpm licenses`)
 - **THEN** le check échoue en nommant la dépendance et la licence incriminée ; la PR ne peut être fusionnée
 
 #### Scenario: Aucune feature gate propriétaire ni intégration de facturation
@@ -38,26 +38,32 @@ Le projet DOIT publier des images de container OCI multi-arch (au minimum `linux
 - **WHEN** le pipeline build l'image deux fois sur deux runners distincts
 - **THEN** les digests des couches non-builder (couches d'application, pas la couche d'OS de base) sont identiques entre les deux builds
 
-### Requirement: Telemetry Strictly Opt-In
-L'instance auto-hébergée NE DOIT envoyer **aucune** donnée vers un endpoint extérieur tant que l'opérateur n'a pas explicitement activé la télémétrie (config `telemetry.enabled=true` ou case cochée à l'enrôlement). Quand activée, les données collectées DOIVENT être anonymisées (pas de hostname brut, pas d'IP brute, pas de noms de tenants ou d'identifiants utilisateur), exhaustivement documentées, et l'opérateur DOIT pouvoir désactiver la télémétrie à tout moment via un seul changement de config sans redémarrage des autres composants.
+### Requirement: No Third-Party Telemetry, Operator-Controlled OpenTelemetry
+Le cœur de Reconaut N'EMBARQUE PAS de SDK d'analytics tiers (Mixpanel, Segment, Amplitude, PostHog, Plausible côté serveur, Matomo, etc.) ni d'endpoint de télémétrie codé vers le projet ou un sous-traitant. Aucune donnée NE DOIT être envoyée vers le projet ou un tiers du fait du code livré. **L'instrumentation OpenTelemetry interne** (traces, métriques, logs structurés) DOIT être disponible et activable par l'opérateur, qui DOIT pouvoir pointer le collecteur OTel vers son propre stack d'observabilité (Jaeger, Tempo, Prometheus, Loki, Grafana, etc.) via les variables d'env OpenTelemetry standard (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, etc.). Aucune destination par défaut n'est codée par le projet ; sans configuration explicite, OTel exporte vers `localhost` ou ne pousse nulle part.
 
-#### Scenario: Fail-closed par défaut
-- **GIVEN** une instance bootée avec config par défaut (télémétrie désactivée)
-- **WHEN** un test d'audit réseau observe les sockets sortants pendant 5 minutes sous trafic simulé
-- **THEN** aucune connexion vers un endpoint de télémétrie projet (ou tiers) n'est observée
-- **AND** aucun log de type « telemetry payload sent » n'est émis
+#### Scenario: Aucun SDK d'analytics tiers dans le code
+- **GIVEN** une revue automatisée du codebase (Rails et Go)
+- **WHEN** un linter scanne les imports et les dépendances
+- **THEN** aucune gem ni package d'analytics tiers n'est importé (pas de `mixpanel-ruby`, `segment`, `amplitude`, `posthog-ruby`, `matomo`, etc.)
+- **AND** aucun endpoint de télémétrie projet n'est codé en dur
 
-#### Scenario: Activation explicite et désactivation runtime
-- **GIVEN** l'opérateur active `telemetry.enabled=true` et configure un endpoint
-- **WHEN** le prochain tick de télémétrie s'exécute
-- **THEN** un payload anonymisé conforme au schéma documenté est envoyé à l'endpoint configuré
-- **AND** l'opérateur passant à `telemetry.enabled=false` voit la prochaine tentative de tick s'abstenir d'envoyer dans la minute, sans nécessité de redémarrer le service
+#### Scenario: Aucune destination OTel par défaut
+- **GIVEN** une instance bootée sans variable `OTEL_EXPORTER_OTLP_ENDPOINT`
+- **WHEN** un test d'audit réseau observe les sockets sortants pendant 30 minutes sous trafic synthétique
+- **THEN** aucune connexion vers un endpoint OTel public n'est observée
+- **AND** aucune connexion vers un endpoint d'analytics tiers n'est observée
 
-#### Scenario: Documentation exhaustive
-- **GIVEN** la page `docs/operating/telemetry.md`
-- **WHEN** un opérateur la lit
-- **THEN** elle énumère exhaustivement les champs collectés, leur type, leur fréquence, l'endpoint cible et la politique de rétention
-- **AND** un test CI échoue si un nouveau champ est introduit dans le code de télémétrie sans mise à jour de cette page
+#### Scenario: Opérateur active OTel vers son propre collecteur
+- **GIVEN** l'opérateur configure `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.internal:4317` dans son environnement de déploiement
+- **WHEN** l'instance redémarre et reçoit du trafic
+- **THEN** les traces/métriques/logs OTel sont exportés vers cet endpoint
+- **AND** aucun export vers une destination autre que celle configurée par l'opérateur n'a lieu
+
+#### Scenario: Métriques Prometheus restent disponibles en pull
+- **GIVEN** l'instance déployée
+- **WHEN** un opérateur scrape `GET /metrics` depuis son propre Prometheus
+- **THEN** les compteurs internes (scans exécutés, requêtes API, durées, etc.) sont disponibles en format Prometheus
+- **AND** ces métriques NE SONT PAS poussées par le code Reconaut — c'est l'opérateur qui scrape
 
 ### Requirement: Contributor Sign-Off (DCO)
 Le projet DOIT exiger un sign-off DCO (Developer Certificate of Origin) sur chaque commit fusionné, vérifié automatiquement par un workflow CI. Le projet NE DOIT PAS exiger de CLA (Contributor License Agreement) qui demanderait une cession de droits supplémentaires aux contributeurs. Le code de conduite (Contributor Covenant 2.1 ou équivalent récent) DOIT être documenté à la racine.
@@ -82,10 +88,11 @@ La roadmap DOIT être publique dans le repo (sous `openspec/changes/` pour les c
 - **AND** le change OpenSpec correspondant référence cet ADR
 
 ### Requirement: No Mandatory External Dependency
-Aucune fonctionnalité du cœur NE DOIT dépendre exclusivement d'un service externe non-substituable. Toute intégration externe (LLM, IdP, broker de jobs, stockage objet, télémétrie) DOIT être (a) substituable par une autre implémentation conforme à une interface documentée, ou (b) optionnelle (désactivable sans perte de fonctionnalité critique). Une instance peut être déployée en environnement *air-gapped* avec uniquement les composants self-hostables livrés.
+Aucune fonctionnalité du cœur NE DOIT dépendre exclusivement d'un service externe non-substituable. Toute intégration externe (LLM, IdP) DOIT être (a) substituable par une autre implémentation conforme à une interface documentée, ou (b) optionnelle (désactivable sans perte de fonctionnalité critique). La file de jobs vit dans Postgres (GoodJob), pas dans un broker externe. Le stockage d'artefacts vit en filesystem local ou en Postgres, pas dans un object store. Aucune télémétrie n'est embarquée. Une instance peut être déployée en environnement *air-gapped* avec uniquement les composants self-hostables livrés.
 
 #### Scenario: Boot air-gapped
 - **GIVEN** une instance déployée dans un réseau sans accès internet sortant
-- **WHEN** l'opérateur configure : embedder local, auth locale, stockage objet local (MinIO ou équivalent), pas de télémétrie, pas d'OIDC public
+- **WHEN** l'opérateur configure : embedder local, auth locale, pas d'OIDC public
 - **THEN** l'instance démarre sans erreur, sert l'API, l'agent et MCP
 - **AND** aucune tentative de connexion sortante vers un endpoint internet n'est observée pendant un cycle d'usage de référence (scan + recherche agent + appel MCP)
+- **AND** aucun service externe n'est requis : Postgres tient la file (GoodJob), le filesystem local tient les exports

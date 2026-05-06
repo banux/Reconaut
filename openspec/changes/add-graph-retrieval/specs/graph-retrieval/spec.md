@@ -25,19 +25,20 @@ La projection graphe DOIT refléter l'état des données de scan ingérées avec
 - **THEN** la métrique `graph_lag_seconds` p95 reste sous 60 s sur toute la fenêtre
 - **AND** la métrique est exposée comme histogramme Prometheus
 
-### Requirement: Tenant Isolation in Graph Queries
-Toute exécution de template Cypher DOIT lier le `tenant_id` du caller dans une clause `WHERE` au niveau de la requête, jamais en post-filtre applicatif. La projection graphe DOIT en outre préserver la Row-Level Security Postgres : un nœud rattaché à un tenant ne DOIT être visible que par ce tenant et le scope `public`.
+### Requirement: Access Control via Authentication and RBAC
+Reconaut étant tenant unique (cf. spec `platform`), l'accès aux templates de retrieval graphe DOIT être contrôlé par l'authentification et le RBAC standard, pas par un filtre `tenant_id` dans les clauses Cypher. Les templates DOIVENT exiger un rôle minimum (`analyst` au minimum pour `/agent/chat`, `viewer` interdit) appliqué côté Rails avant tout appel Cypher. Aucun paramètre `tenant_id` n'est attendu dans les templates ; les nœuds graphe n'ont pas de propriété `tenant_id`.
 
-#### Scenario: Requête template du tenant A ne fuite pas vers tenant B
-- **GIVEN** les tenants A et B ont chacun des hôtes privés et des certificats partagés (clusters de cert)
-- **WHEN** un utilisateur authentifié comme tenant A déclenche un template `cert_cluster(cert_sha256=X)` où `X` est partagé entre A et B
-- **THEN** la réponse ne contient que les hôtes du tenant A (et `public` le cas échéant) — jamais ceux du tenant B
-- **AND** un test d'intégration de 100 requêtes randomisées du tenant A confirme zéro fuite
+#### Scenario: Viewer ne peut pas exécuter de template graphe
+- **GIVEN** un utilisateur avec le rôle `viewer`
+- **WHEN** une requête arrive à un endpoint qui exercerait un template graphe (par ex. `/agent/chat` avec une requête structurelle)
+- **THEN** Rails rejette la requête avec HTTP 403 avant tout appel Cypher
+- **AND** une ligne d'audit `status=unauthorized` est écrite
 
-#### Scenario: RLS appliquée par les rôles graphe
-- **GIVEN** le rôle Postgres applicatif utilisé pour exécuter les templates
-- **WHEN** une requête Cypher contourne (par bug ou injection résiduelle) la clause `WHERE tenant_id = ...`
-- **THEN** la RLS Postgres rejette les lignes hors-tenant au niveau du planner ; le résultat ne contient pas de nœuds d'autres tenants
+#### Scenario: Aucun paramètre tenant_id dans les templates
+- **GIVEN** une revue automatisée du registry de templates
+- **WHEN** un test inspecte la signature de chaque template enregistré
+- **THEN** aucune signature ne contient de paramètre `tenant_id`, `tenant`, `caller_tenant` ou équivalent
+- **AND** aucun Cypher de template ne contient de clause `WHERE n.tenant_id = $tid`
 
 ### Requirement: Parameterized Read-Only Query Templates
 Le code applicatif DOIT exposer un catalogue de templates Cypher paramétrés. Chaque template porte un `template_id` stable, une signature de paramètres typée et une clause Cypher fixe. Le LLM ne génère JAMAIS de Cypher : il sélectionne un `template_id` et fournit des paramètres typés. Les templates DOIVENT être en lecture seule — aucun template ne peut contenir `CREATE`, `MERGE`, `SET`, `DELETE`, `DETACH`, `REMOVE` ou toute autre clause mutante.
@@ -98,12 +99,12 @@ Si AGE est indisponible (extension absente, requête en timeout, RLS rejette par
 - **THEN** la connexion Postgres est libérée (pas de requête zombie), un fallback vectoriel est tenté, la métrique `graph_template_timeout_total{template_id=...}` incrémente
 
 ### Requirement: Graph Query Audit
-Chaque exécution de template DOIT produire une entrée d'audit append-only contenant `template_id`, paramètres normalisés (avec valeurs d'identifiants tenant masquées si la politique l'exige), `tenant_id` du caller, `key_id` ou `user_id`, durée d'exécution en ms, nombre de nœuds touchés, et statut (`success` / `timeout` / `unauthorized` / `unknown_template`). Le journal réutilise le même schéma de table que le journal d'audit défini dans `gdpr-compliance`.
+Chaque exécution de template DOIT produire une entrée d'audit append-only contenant `template_id`, paramètres normalisés, `key_id` ou `user_id` du caller, durée d'exécution en ms, nombre de nœuds touchés, et statut (`success` / `timeout` / `unauthorized` / `unknown_template`). Le journal réutilise le même schéma de table que le journal d'audit défini dans `gdpr-compliance`.
 
 #### Scenario: Trace d'audit pour exécution réussie
 - **GIVEN** un utilisateur du tenant A déclenche le template `cert_cluster`
 - **WHEN** l'exécution termine avec succès en 80 ms en touchant 12 nœuds
-- **THEN** une ligne d'audit est écrite en moins de 1 s contenant `template_id="cert_cluster"`, `tenant_id="A"`, `duration_ms=80`, `nodes_touched=12`, `status="success"`
+- **THEN** une ligne d'audit est écrite en moins de 1 s contenant `template_id="cert_cluster"`, `user_id` du caller, `duration_ms=80`, `nodes_touched=12`, `status="success"`
 - **AND** un test d'intégration vérifie la présence de la ligne via `SELECT` sur la table d'audit
 
 #### Scenario: Audit du rejet hors catalogue

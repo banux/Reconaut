@@ -66,14 +66,19 @@ Le scanner DOIT imposer des rate limits par cible et par AS pour ne pas saturer 
 - **THEN** la requête n'est pas émise et la décision est journalisée avec la raison `robots-disallow`
 
 ### Requirement: Indexing and Retention
-Les données de scan capturées DEVRONT être stockées dans un store partitionné par temps avec une rétention par défaut de 90 jours en tier chaud et 24 mois en tier froid. L'opérateur DEVRA pouvoir surcharger la rétention dans les limites définies par la plateforme.
+Les données de scan capturées DEVRONT être stockées dans un store partitionné par temps (TimescaleDB) avec une rétention par défaut de 90 jours en tier chaud et 24 mois en tier froid. Le tier froid DOIT être implémenté soit (a) dans une table Postgres archive compressée (TimescaleDB compression), soit (b) sous forme de fichiers sur le filesystem local (volume monté), au choix de l'opérateur via configuration. Aucune dépendance à un stockage objet S3-compatible n'est introduite. L'opérateur DEVRA pouvoir surcharger la rétention dans les limites définies par la plateforme.
 
 #### Scenario: Opérateur demande 12 mois de rétention chaude
 - **WHEN** un opérateur définit `retention.hot_days = 365` via l'API
 - **THEN** les résultats de scan ultérieurs sont conservés en tier chaud pendant 365 jours
 - **AND** le changement est journalisé dans le journal d'audit en moins de 1 seconde avec acteur, ancienne valeur et nouvelle valeur
 
-#### Scenario: Rétention par défaut appliquée
-- **GIVEN** une instance qui n'a jamais surchargé la rétention
+#### Scenario: Rétention par défaut appliquée — tier froid Postgres compressé
+- **GIVEN** une instance configurée `cold_tier.backend=postgres_compressed` (défaut)
 - **WHEN** l'âge d'une ligne de scan dépasse 90 jours
-- **THEN** la ligne est migrée du tier chaud vers le tier froid lors du prochain job nocturne de rétention
+- **THEN** la ligne est migrée du tier chaud (chunk Timescale non-compressé) vers le tier froid (chunk Timescale compressé) lors du prochain job nocturne de rétention
+
+#### Scenario: Rétention par défaut appliquée — tier froid filesystem
+- **GIVEN** une instance configurée `cold_tier.backend=filesystem` avec `cold_tier.path=/var/lib/reconaut/cold`
+- **WHEN** l'âge d'une ligne de scan dépasse 90 jours
+- **THEN** les lignes correspondantes sont exportées au format compressé (par ex. JSONL.gz) dans le chemin configuré et supprimées du tier chaud lors du prochain job nocturne
