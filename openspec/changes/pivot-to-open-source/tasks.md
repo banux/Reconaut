@@ -6,9 +6,9 @@ Checklist du pivot vers un projet OSS auto-hébergeable, scope-driven, operator-
 
 ## 1. Décisions de gouvernance OSS — spec : `open-source-governance`
 
-- [ ] **1.1 ADR : choix de licence**
-  - **Notes** : Rédiger `docs/adr/0001-license.md` qui acte la licence retenue parmi {AGPL-3.0, Apache-2.0, BUSL-1.1, autre OSI-approved}. Justifier vis-à-vis du modèle de menace OSS (re-hébergement, contributions, compatibilité avec dépendances). Intégrer le fichier `LICENSE` à la racine du repo. Mettre à jour les en-têtes SPDX dans les fichiers source.
-  - **Test plan** : `licensee detect .` (ou équivalent) renvoie la licence retenue ; un check CI échoue si un fichier source ne porte pas l'en-tête SPDX attendu.
+- [ ] **1.1 Application de la licence AGPL-3.0-only**
+  - **Notes** : Décision actée (cf. proposal §Décisions prises §1) — pas de vocation commerciale, AGPL protège contre la ré-hébergement managé fermé sans réciprocité. Intégrer le texte intégral d'AGPL-3.0 dans `LICENSE` à la racine, ajouter `SPDX-License-Identifier: AGPL-3.0-only` en en-tête de chaque fichier source. Rédiger un ADR court `docs/adr/0001-license.md` qui consigne la décision (contexte, options écartées Apache-2.0/BUSL-1.1, conséquences). Vérifier la compatibilité de licence des dépendances (transitives incluses) — refuser toute dépendance dont la licence est incompatible avec AGPL côté sortie.
+  - **Test plan** : `licensee detect .` renvoie `AGPL-3.0-only` ; un check CI échoue si un fichier source n'a pas l'en-tête SPDX attendu ; un audit `bundle-audit` / `cargo-deny` / `pnpm licenses ls` confirme zéro dépendance avec licence incompatible.
 
 - [ ] **1.2 Politique de contribution (DCO)**
   - **Notes** : Ajouter `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), workflow GitHub Action `dco-check` qui rejette les PR sans `Signed-off-by:` valide.
@@ -85,10 +85,6 @@ Checklist du pivot vers un projet OSS auto-hébergeable, scope-driven, operator-
 - [ ] **5.2 Authentification locale par utilisateur + clés API personnelles**
   - **Notes** : En plus d'OIDC, livrer une auth locale (`devise` ou équivalent ; mots de passe Argon2id, clés API hashées en base, rotation). C'est le mode par défaut pour les déploiements simples ; OIDC reste activable.
   - **Test plan** : Test e2e crée un compte local, génère une clé API, l'utilise pour appeler l'API et MCP ; assure que la révocation invalide la clé immédiatement.
-
-- [ ] **5.3 Retirer la facturation Stripe du cœur**
-  - **Notes** : Supprimer toute mention de `Stripe`, `Stripe Tax`, compteurs de billing dans le code et les specs cœur. Les compteurs de scans / appels MCP sont conservés comme métriques d'observation, pas comme inputs de facturation.
-  - **Test plan** : `grep -RniE "stripe|stripe_tax|billing\." apps/api openspec/changes/init-reconaut-platform` ne renvoie aucune occurrence dans le code et les notes ; le spec delta `platform` MODIFIED de ce change retire formellement l'exigence d'intégration Stripe.
 
 ---
 

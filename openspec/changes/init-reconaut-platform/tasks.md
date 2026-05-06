@@ -122,10 +122,6 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Notes** : RLS Postgres deny-by-default ; pgvector hérite de la RLS ; préfixe S3 par tenant avec bucket policy ; queue partitionnée par tenant. Les politiques RLS sont préservées par la réplication cross-région.
   - **Test plan** : Sonde cross-tenant (1000 appels) renvoie 404 pour IDs existants-d'autre-tenant et IDs inexistants ; variance de timing < 10 ms (pas d'oracle). Tentative path-traversal sur le store objet refusée par bucket policy. Matrice (région × tenant) testée pour la non-fuite.
 
-- [ ] **7.3 Intégration facturation Stripe EU**
-  - **Notes** : Stripe Tax pour la TVA EU ; compteurs : scans, appels MCP, dépassement de rétention. Webhooks idempotents (dedup par event id).
-  - **Test plan** : e2e en mode test Stripe : créer un tenant, simuler un mois d'usage compteur, assurer que les lignes de facture matchent les enregistrements d'usage émis et que les totaux sont corrects TVA incluse.
-
 ---
 
 ## 8. Documentation

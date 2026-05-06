@@ -2,19 +2,25 @@
 
 ## ADDED Requirements
 
-### Requirement: OSI-Approved License
-Le code source DOIT être distribué sous une licence approuvée par l'OSI, déclarée dans un fichier `LICENSE` à la racine du repo et reflétée par des en-têtes SPDX (`SPDX-License-Identifier:`) dans les fichiers source. Aucune fonctionnalité du cœur NE DOIT être verrouillée derrière une licence commerciale ou un build « enterprise » fermé. Si le projet adopte un modèle source-available transitoire (par ex. BUSL-1.1) avant bascule OSI, la date de bascule DOIT être déclarée dans le fichier `LICENSE` lui-même et exécutée mécaniquement.
+### Requirement: AGPL-3.0-only License
+Le code source DOIT être distribué sous **GNU AGPL-3.0-only**, déclarée dans un fichier `LICENSE` à la racine du repo (texte intégral) et reflétée par des en-têtes SPDX (`SPDX-License-Identifier: AGPL-3.0-only`) dans chaque fichier source. Aucune fonctionnalité du cœur NE DOIT être verrouillée derrière une licence commerciale ou un build « enterprise » fermé. Aucune intégration de facturation (Stripe, métering commercial) NE DOIT être embarquée dans le cœur — le projet n'a pas de vocation commerciale, et toute offre managée tierce vivrait *au-dessus* du cœur sans modifier sa licence.
 
 #### Scenario: Fichier LICENSE présent et SPDX cohérent
 - **GIVEN** une checkout fraîche du repo
 - **WHEN** la suite CI exécute le check de licence
-- **THEN** un fichier `LICENSE` racine existe et son contenu correspond à une licence OSI-approved (ou à une licence transitoire avec date de bascule)
-- **AND** chaque fichier source porte un en-tête `SPDX-License-Identifier:` cohérent avec le `LICENSE` racine ; un fichier sans en-tête fait échouer le check
+- **THEN** un fichier `LICENSE` racine contient le texte intégral de l'AGPL-3.0
+- **AND** chaque fichier source porte un en-tête `SPDX-License-Identifier: AGPL-3.0-only` ; un fichier sans en-tête fait échouer le check
+- **AND** `licensee detect .` renvoie `AGPL-3.0-only`
 
-#### Scenario: Aucune feature gate propriétaire
+#### Scenario: Dépendances incompatibles refusées
+- **GIVEN** une PR qui ajoute une dépendance sous licence incompatible avec AGPL en sortie (par ex. propriétaire fermée, ou clause de non-redistribution)
+- **WHEN** le check de licence des dépendances s'exécute (`bundle-audit`, `cargo-deny`, `pnpm licenses`)
+- **THEN** le check échoue en nommant la dépendance et la licence incriminée ; la PR ne peut être fusionnée
+
+#### Scenario: Aucune feature gate propriétaire ni intégration de facturation
 - **GIVEN** une revue automatisée du code
-- **WHEN** un linter scanne les chemins de code conditionnés par une variable de licence (`if ENV["RECONAUT_LICENSE_KEY"]`, etc.)
-- **THEN** aucun chemin de fonctionnalité ne dépend d'une licence commerciale ; le linter rejette toute introduction d'un tel chemin
+- **WHEN** un linter scanne (a) les chemins de code conditionnés par une variable de licence (`if ENV["RECONAUT_LICENSE_KEY"]`, etc.), (b) les imports de SDK de facturation (`stripe`, `chargebee`, `paddle`, etc.)
+- **THEN** aucun chemin de fonctionnalité ne dépend d'une licence commerciale et aucun SDK de facturation n'est importé ; le linter rejette toute introduction d'un tel chemin ou import
 
 ### Requirement: Reproducible Container Distribution
 Le projet DOIT publier des images de container OCI multi-arch (au minimum `linux/amd64` et `linux/arm64`) pour chaque application cœur (api, web, scanner) à chaque release SemVer. Les images DOIVENT être construites depuis le repo public via un workflow CI auditable, taguées par version SemVer, accompagnées d'un SBOM CycloneDX et signées via cosign keyless. La reproductibilité fonctionnelle (même Dockerfile + même lockfile = même set de couches non-builder) est exigée ; la reproductibilité bit-à-bit est désirable mais non bloquante.

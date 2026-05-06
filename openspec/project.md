@@ -35,8 +35,8 @@ Reconaut est un **outil open source auto-hébergeable** d'Attack Surface Managem
 
 ## Gouvernance et distribution
 
-- **Licence** : à figer dans le change `pivot-to-open-source`. Candidates : AGPL-3.0 (défaut proposé, protège contre la ré-hébergement sans contribution), Apache-2.0 (adoption plus large), BUSL-1.1 (transition source-available → OSS différée). Le choix est une décision explicite documentée dans l'ADR du change.
-- **Contributions** : DCO (sign-off) plutôt que CLA, sauf décision contraire.
+- **Licence** : **AGPL-3.0-only**. Le projet n'a pas de vocation commerciale ; l'AGPL protège contre la ré-hébergement en service managé fermé, ce qui est la seule contrepartie attendue pour le travail open source.
+- **Contributions** : DCO (sign-off) plutôt que CLA — pas de cession de droits supplémentaires demandée.
 - **Releases** : SemVer, SBOM CycloneDX publié avec chaque image, signatures Sigstore/cosign.
 - **Roadmap publique** dans le repo (ce dossier OpenSpec).
 

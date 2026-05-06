@@ -17,7 +17,7 @@ Le frontend web de Reconaut DOIT être implémenté en Vue.js (3.x ou supérieur
 - **THEN** les assets JavaScript servis sont exclusivement issus du build Vue (manifest Vite ou équivalent), sans runtime React/Angular/Svelte
 
 ### Requirement: Backend Application Runtime
-Le backend applicatif de Reconaut (API tenant, agent conversationnel, facturation, journal d'audit, et serveur MCP) DOIT être implémenté en Ruby on Rails. Le serveur MCP HTTP+SSE DOIT s'exécuter à l'intérieur du même process Rails que le reste de l'API, partageant la pile de middlewares (auth, rate-limit, audit, observabilité). Aucun service backend séparé n'héberge le MCP en v1.
+Le backend applicatif de Reconaut (API tenant, agent conversationnel, journal d'audit, et serveur MCP) DOIT être implémenté en Ruby on Rails. Le serveur MCP HTTP+SSE DOIT s'exécuter à l'intérieur du même process Rails que le reste de l'API, partageant la pile de middlewares (auth, rate-limit, audit, observabilité). Aucun service backend séparé n'héberge le MCP en v1.
 
 #### Scenario: Endpoint MCP partage l'auth de l'API tenant
 - **GIVEN** le serveur Rails est démarré avec sa pile de middlewares standard
@@ -43,7 +43,7 @@ Les workers de scan (énumération de sous-domaines, port scan, fingerprinting d
 - **GIVEN** une revue automatisée du codebase Rails
 - **WHEN** le linter de stack scanne les imports et les appels
 - **THEN** aucun appel à `Socket.tcp`, `Net::HTTP`, `OpenSSL::SSL::SSLSocket` ou équivalent n'est fait avec une URL/adresse provenant d'un enregistrement `Host` de tenant
-- **AND** seuls les appels sortants vers les services internes (broker, base, IdP, Mistral, Stripe) et le serveur d'audit sont autorisés
+- **AND** seuls les appels sortants vers les services internes (broker, base, IdP, embedder externe si configuré) et le serveur d'audit sont autorisés
 
 ### Requirement: Rails ↔ Rust Communication via Job Queue
 Rails et les workers Rust DOIVENT communiquer exclusivement via une file de jobs distribuée. Aucun appel synchrone Rails → Rust (HTTP, gRPC, RPC propriétaire) NE DOIT exister. Le contrat est un schéma de message versionné comportant au minimum un `schema_version` (entier monotone), une clé d'idempotence et la charge utile typée du job ou du résultat.

@@ -9,7 +9,7 @@ Une décision de stack a été prise le 2026-05-05 et doit maintenant être codi
 Le change introduit une nouvelle capacité **`architecture`** qui acte les choix de stack et les contraintes structurantes :
 
 1. **Frontend = Vue.js** (3.x) — un seul framework UI livré en v1.
-2. **Backend applicatif = Ruby on Rails** — héberge l'API tenant, l'agent conversationnel, la facturation, le journal d'audit, **et le serveur MCP HTTP+SSE** (pas un service séparé).
+2. **Backend applicatif = Ruby on Rails** — héberge l'API tenant, l'agent conversationnel, le journal d'audit, **et le serveur MCP HTTP+SSE** (pas un service séparé).
 3. **Workers de scan = Rust** — binaires séparés du process Rails ; aucune logique de scan ne réside dans Rails.
 4. **Communication Rails ↔ Rust = file de jobs distribuée** — pas de RPC synchrone. Le contrat est un schéma de message versionné (job request / job result). Le broker doit être EU-hébergé.
 5. **Distribution horizontale des workers** — N workers Rust instanciables sans coordination explicite ; consommation au-moins-une-fois ; idempotence portée par une clé de job.

@@ -9,7 +9,7 @@ Checklist d'adoption de la stack Vue.js + Rails + Rust + file de jobs. Chaque t�
 - [ ] **1.1 Mettre à jour `openspec/project.md`**
   - **Notes** : Remplacer la section *Stack (existante et prévue)* qui mentionne Python 3.12 / FastAPI / aiohttp. Nouvelle section :
     - **Frontend** : Vue.js 3 (Composition API), Vite, Pinia (état), Vue Router.
-    - **Backend** : Ruby on Rails (version à figer en 1.2), héberge l'API tenant, l'agent conversationnel, la facturation, le journal d'audit et le serveur MCP HTTP+SSE dans le même process.
+    - **Backend** : Ruby on Rails (version à figer en 1.2), héberge l'API tenant, l'agent conversationnel, le journal d'audit et le serveur MCP HTTP+SSE dans le même process.
     - **Workers de scan** : Rust (édition stable la plus récente), binaires séparés, communication Rails ↔ Rust uniquement via file de jobs.
     - **Broker** : file de jobs distribuée EU-hébergée, choix concret différé.
     - **Stockage** : Postgres + extensions TimescaleDB et pgvector ; stockage objet S3-compatible EU.
@@ -31,7 +31,7 @@ Checklist d'adoption de la stack Vue.js + Rails + Rust + file de jobs. Chaque t�
 
 - [ ] **2.1 Layout monorepo Rails + Vue + Rust**
   - **Notes** : Structure cible :
-    - `apps/api/` : Rails monolithe (API tenant, agent, MCP, billing, audit). MCP exposé sous une route Rails (par ex. `mount Mcp::Engine, at: "/mcp"`) dans le même process.
+    - `apps/api/` : Rails monolithe (API tenant, agent, MCP, audit). MCP exposé sous une route Rails (par ex. `mount Mcp::Engine, at: "/mcp"`) dans le même process.
     - `apps/web/` : Vue 3 + Vite, dossier indépendant, déploiement statique sur CDN EU.
     - `apps/scanner/` : workspace Cargo Rust avec un binaire `scanner-worker` et une crate `scan-protocols` réutilisable.
     - `packages/job-schema/` : définitions de schéma de message (JSON Schema ou ProtoBuf), versionnées, consommées à la fois par Rails (codegen ou parsing JSON) et par Rust (codegen via `serde` ou `prost`).
@@ -46,7 +46,7 @@ Checklist d'adoption de la stack Vue.js + Rails + Rust + file de jobs. Chaque t�
   - **Notes** : Script CI `scripts/check_stack.sh` qui :
     - rejette tout fichier `.jsx`/`.tsx` ou import `react` dans `apps/web/`,
     - rejette toute gem cliente RPC vers les workers (regex sur `Gemfile.lock` pour les patterns `grpc`, `scanner-client`, etc.),
-    - rejette tout import direct de `Socket`/`Net::HTTP`/`OpenSSL::SSL::SSLSocket` dans le code Rails à l'exception d'une allowlist documentée (Mistral, Stripe, IdP OIDC, broker, audit, healthcheck),
+    - rejette tout import direct de `Socket`/`Net::HTTP`/`OpenSSL::SSL::SSLSocket` dans le code Rails à l'exception d'une allowlist documentée (embedder externe si configuré, IdP OIDC, broker, audit, healthcheck),
     - rejette tout fichier `.py`/`pyproject.toml`/`uv.lock` dans le repo.
   - **Test plan** : `scripts/check_stack.sh` exécuté à propre passe (exit 0). Test du linter : créer un fichier `apps/web/src/Bad.jsx`, lancer le script, vérifier exit ≠ 0 avec message `frontend-stack-violation`. Idem pour un import `Net::HTTP.get(host_url)` dans le contrôleur API.
 

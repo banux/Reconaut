@@ -46,8 +46,5 @@ Les utilisateurs DOIVENT s'authentifier soit via **OIDC** (Keycloak, Authentik, 
 
 ## REMOVED Requirements
 
-### Requirement: Stripe EU Billing Integration
-**Raison :** La facturation Stripe (Stripe EU + Stripe Tax, compteurs scans / appels MCP / dépassement de rétention, webhooks idempotents) n'a sa place que dans un produit SaaS commercial. Le projet OSS auto-hébergeable n'embarque pas de facturation. Si une offre managée commerciale est construite par un opérateur (le projet ou un tiers) au-dessus du même code, la facturation y vivra comme une couche externe, hors du périmètre du cœur. Les compteurs `scans_total`, `mcp_calls_total` etc. restent exposés comme métriques Prometheus pour l'observabilité opérateur, mais ne sont liés à aucun système de billing dans le cœur.
-
 ### Requirement: Multi-Region Active-Active EU as Invariant
 **Raison :** L'exigence que la plateforme tourne simultanément dans deux régions EU read/write avec un retard de réplication p99 < 5 s était dimensionnée pour un SaaS critique. Pour un déploiement OSS auto-hébergé, le multi-région reste *possible* (Postgres standard) mais n'est plus un invariant cœur. La résidence configurable (cf. `gdpr-compliance / Configurable Data Residency`) couvre désormais le contrat de localisation des données, et l'opérateur choisit librement sa topologie (single-AZ, multi-AZ, multi-région, on-prem racks).
