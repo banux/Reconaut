@@ -3,16 +3,42 @@
 ## ADDED Requirements
 
 ### Requirement: Asset Discovery Pipeline
-Le système DOIT scanner les plages IPv4 publiques et un ensemble configurable et échantillonné de préfixes IPv6 pour découvrir les hôtes répondants, en capturant l'IP, l'ASN, la géolocalisation (ISO 3166-1 alpha-2), le reverse-DNS (s'il existe) et les timestamps `discovered_at` / `last_seen`.
+Le système DOIT scanner uniquement les actifs couverts par une entrée de scope **explicitement déclarée par l'opérateur** (CIDR, domaine ou hôte). Aucun balayage du grand internet n'est livré : sans entrée de scope active, le scanner n'émet aucune sonde. Pour chaque hôte découvert dans le scope, le système capture l'IP, l'ASN, la géolocalisation (ISO 3166-1 alpha-2 si dérivable des bases ouvertes embarquées, sinon `null`), le reverse-DNS (s'il existe) et les timestamps `discovered_at` / `last_seen`.
 
-#### Scenario: Nouvel hôte découvert
-- **WHEN** le planificateur exécute une fenêtre de scan couvrant un `/24` contenant au moins un hôte répondant
-- **THEN** le système enregistre exactement une ligne `host` par IP répondante avec ASN, pays, reverse-DNS (ou `null`) et `discovered_at`
-- **AND** les hôtes déjà connus dans cette plage voient leur champ `last_seen` mis à jour dans la même transaction de base de données
+#### Scenario: Nouvel hôte découvert dans le scope
+- **GIVEN** une entrée de scope active de `kind=cidr` couvrant `192.0.2.0/24`
+- **WHEN** le planificateur exécute une fenêtre de scan sur cette plage et au moins un hôte répond
+- **THEN** le système enregistre exactement une ligne `host` par IP répondante avec ASN, pays (si disponible), reverse-DNS (ou `null`) et `discovered_at`
+- **AND** les hôtes déjà connus dans cette plage voient leur champ `last_seen` mis à jour dans la même transaction de base
 
-#### Scenario: Hôte non répondant reste absent
-- **WHEN** un `/24` n'a aucun hôte répondant durant la fenêtre de scan
-- **THEN** aucune ligne n'est écrite et l'exécution est marquée `completed_empty` avec le nombre de sondes et la durée enregistrés
+#### Scenario: Cible hors scope refusée en dur
+- **GIVEN** aucune entrée de scope active ne couvre `203.0.113.10`
+- **WHEN** un job de scan ciblant `203.0.113.10` est consommé par un worker
+- **THEN** le worker rejette le job avec le statut `out-of-scope`, n'émet **aucun paquet** vers la cible, et écrit une ligne d'audit avec `actor`, `target=203.0.113.10`, `reason=out-of-scope`
+- **AND** un test réseau confirme qu'aucun socket sortant vers `203.0.113.10` n'a été ouvert
+
+### Requirement: Scope Declaration and Enforcement
+L'opérateur DOIT déclarer explicitement le scope autorisé sous forme d'entrées typées (`cidr`, `domain`, `host`). Toute mutation du scope (ajout, révocation) DOIT être journalisée dans le journal d'audit avec l'acteur, la valeur et la raison. Le scanner DOIT vérifier l'appartenance d'une cible au scope **au moment de l'exécution** du job (résolution DNS pour les entrées `domain` faite à ce moment-là), pas seulement à la planification.
+
+#### Scenario: Ajout d'une entrée de scope
+- **GIVEN** un opérateur authentifié avec rôle `admin`
+- **WHEN** il appelle `POST /scopes` avec `{ "kind": "cidr", "value": "192.0.2.0/24", "description": "Périmètre de prod" }`
+- **THEN** une ligne est créée avec `created_by`, `created_at` et `revoked_at = NULL`
+- **AND** une ligne d'audit `action=scope.created` est écrite en moins de 1 s
+- **AND** un job de scan ultérieur ciblant `192.0.2.10` n'est plus rejeté `out-of-scope`
+
+#### Scenario: Révocation d'une entrée de scope
+- **GIVEN** une entrée de scope active couvrant `192.0.2.0/24`
+- **WHEN** l'opérateur appelle `DELETE /scopes/{id}`
+- **THEN** `revoked_at` est posé sur la ligne (pas de suppression en dur)
+- **AND** une ligne d'audit `action=scope.revoked` est écrite
+- **AND** un job de scan ultérieur ciblant `192.0.2.10` est de nouveau rejeté `out-of-scope`
+
+#### Scenario: Vérification au runtime (résolution DNS d'une entrée domain)
+- **GIVEN** une entrée de scope active `kind=domain`, `value=example.test`
+- **WHEN** un job de scan résout `example.test` à `192.0.2.10` au moment de l'exécution
+- **THEN** la sonde sur `192.0.2.10` est autorisée
+- **AND** si une révocation de l'entrée intervient entre la planification et l'exécution, la sonde est rejetée `out-of-scope` même si elle avait été planifiée précédemment
 
 ### Requirement: Port and Service Fingerprinting
 Pour chaque hôte découvert, le système DEVRA sonder une liste configurable de ports TCP et UDP et capturer les bannières, les certificats TLS feuille et les fingerprints spécifiques aux protocoles HTTP(S), SSH, RDP, MQTT, CoAP et Modbus.
@@ -27,32 +53,27 @@ Pour chaque hôte découvert, le système DEVRA sonder une liste configurable de
 - **THEN** la bannière de protocole SSH (par ex. `SSH-2.0-OpenSSH_8.9p1`) et le fingerprint de la host-key (SHA-256) sont enregistrés ; aucune tentative d'authentification n'est effectuée
 
 ### Requirement: Scan Rate Limiting and Abuse Controls
-Le scanner DOIT imposer des rate limits par cible et par AS, DOIT ignorer les cibles publiant un opt-out DNS, et DOIT respecter `robots.txt` pour toute sonde HTTP au-delà de la page d'index.
+Le scanner DOIT imposer des rate limits par cible et par AS pour ne pas saturer le périmètre scanné, et DOIT respecter `robots.txt` pour toute sonde HTTP au-delà de la page d'index.
 
 #### Scenario: Limite par AS tenue
 - **GIVEN** une limite par AS configurée à 50 requêtes/seconde
-- **WHEN** le planificateur dispatche des sondes vers les hôtes de cet AS
+- **WHEN** le planificateur dispatche des sondes vers les hôtes de cet AS (tous dans le scope)
 - **THEN** le débit sortant réel mesuré au NIC d'egress sur toute fenêtre de 10 secondes est ≤ 55 rps (tolérance 5 %) et ≥ 0 rps
 
-#### Scenario: Cible demande l'opt-out via DNS TXT
-- **GIVEN** le domaine apex d'une cible publie `_reconaut-optout TXT "1"`
-- **WHEN** le scanner planifie une sonde contre ce domaine ou contre un hôte de l'ensemble A/AAAA résolu de ce domaine
-- **THEN** la sonde est ignorée, la décision est journalisée avec la raison `optout-dns`, et le domaine apex est ajouté au cache d'opt-out pour 30 jours
-
 #### Scenario: robots.txt interdit le crawl profond
-- **GIVEN** un hôte dont le `robots.txt` interdit `/admin`
+- **GIVEN** un hôte du scope dont le `robots.txt` interdit `/admin`
 - **WHEN** le sondeur HTTP envisage de récupérer `/admin`
 - **THEN** la requête n'est pas émise et la décision est journalisée avec la raison `robots-disallow`
 
 ### Requirement: Indexing and Retention
-Les données de scan capturées DEVRONT être stockées dans un store partitionné par temps avec une rétention par défaut de 90 jours en tier chaud et 24 mois en tier froid. Chaque tenant DEVRA pouvoir surcharger la rétention dans les limites définies par la plateforme.
+Les données de scan capturées DEVRONT être stockées dans un store partitionné par temps avec une rétention par défaut de 90 jours en tier chaud et 24 mois en tier froid. L'opérateur DEVRA pouvoir surcharger la rétention dans les limites définies par la plateforme.
 
-#### Scenario: Tenant demande 12 mois de rétention chaude
-- **WHEN** un admin tenant définit `retention.hot_days = 365` via l'API
-- **THEN** les résultats de scan ultérieurs pour ce tenant sont conservés en tier chaud pendant 365 jours
+#### Scenario: Opérateur demande 12 mois de rétention chaude
+- **WHEN** un opérateur définit `retention.hot_days = 365` via l'API
+- **THEN** les résultats de scan ultérieurs sont conservés en tier chaud pendant 365 jours
 - **AND** le changement est journalisé dans le journal d'audit en moins de 1 seconde avec acteur, ancienne valeur et nouvelle valeur
 
 #### Scenario: Rétention par défaut appliquée
-- **GIVEN** un tenant qui n'a jamais surchargé la rétention
+- **GIVEN** une instance qui n'a jamais surchargé la rétention
 - **WHEN** l'âge d'une ligne de scan dépasse 90 jours
 - **THEN** la ligne est migrée du tier chaud vers le tier froid lors du prochain job nocturne de rétention
