@@ -1,0 +1,30 @@
+# Configuration Postgres - apps/api
+#
+# La base est servie par le Postgres dev defini dans docker-compose.yml
+# (Postgres 16 + TimescaleDB + pgvector + Apache AGE). Cf. openspec/project.md
+# section Stack.
+#
+# Le user/password defaut correspondent au docker-compose racine. En CI ou
+# en environnement bootstrap, on peut pointer ailleurs via DATABASE_URL.
+
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  host: <%= ENV.fetch("DATABASE_HOST", "localhost") %>
+  port: <%= ENV.fetch("DATABASE_PORT", 5432) %>
+  username: <%= ENV.fetch("DATABASE_USER", "reconaut") %>
+  password: <%= ENV.fetch("DATABASE_PASSWORD", "reconaut_dev_password") %>
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+development:
+  <<: *default
+  database: <%= ENV.fetch("DATABASE_NAME", "reconaut_development") %>
+
+test:
+  <<: *default
+  database: <%= ENV.fetch("DATABASE_NAME_TEST", "reconaut_test") %>
+
+production:
+  <<: *default
+  database: <%= ENV.fetch("DATABASE_NAME", "reconaut_production") %>
+  url: <%= ENV["DATABASE_URL"] %>

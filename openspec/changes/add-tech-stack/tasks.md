@@ -17,7 +17,7 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 
 ## 2. Bootstrap monorepo conforme à la stack — spec : `architecture`
 
-- [ ] **2.1 Layout monorepo Rails + Vue + Go**
+- [x] **2.1 Layout monorepo Rails + Vue + Go**
   - **Notes** : Structure cible :
     - `apps/api/` : Rails 8 monolithe (API, agent, MCP, audit). MCP exposé sous une route Rails (par ex. `mount Mcp::Engine, at: "/mcp"`) dans le même process.
     - `apps/web/` : Vue 3 + Vite, dossier indépendant, déploiement statique servi par Rails (asset pipeline) ou par un reverse proxy.
@@ -25,6 +25,7 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
     - `packages/job-schema/` : définitions de schéma de message (JSON Schema canonique), versionnées, consommées à la fois par Rails (parsing/validation JSON) et par Go (génération de structs via `go-jsonschema` ou équivalent).
     - `Dockerfile` par app, `docker-compose.yml` racine pour le dev local (Postgres + Rails + scanner — pas de broker externe, GoodJob tape directement dans Postgres).
   - **Test plan** : `bin/setup` racine installe Ruby (via `mise`/`asdf`), Node (pour Vue), Go ; `bin/test` exécute en parallèle `cd apps/api && bundle exec rspec`, `cd apps/web && pnpm test`, `cd apps/scanner && go test ./...` ; chaque suite contient un test smoke trivial qui passe.
+  - **Statut** : layout en place, Rails 8 API généré, Vue 3 + Vite généré, module Go avec binaire `scanner-worker`. `bin/test` passe les 3 suites smoke. `bin/setup` build et démarre l'image Postgres dev. Reste : intégrer `packages/job-schema` côté Rails et Go (cf. §3.1), Dockerfile par sous-app (différé tant que la stack runtime n'est pas figée pour la prod).
 
 - [ ] **2.2 Pipeline CI multi-stack (GitHub Actions)**
   - **Notes** : Jobs séparés par app : `api-rubocop`, `api-rspec`, `web-eslint`, `web-vitest`, `scanner-golangci-lint`, `scanner-go-test`, build d'image par app. Cache des dépendances (Bundler, pnpm, Go module cache `~/go/pkg/mod`) keyé par lockfile.

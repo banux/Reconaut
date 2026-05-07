@@ -6,4 +6,11 @@ Specs de reference :
 - `openspec/changes/add-tech-stack/specs/architecture/spec.md`
 - `openspec/project.md` (section Stack)
 
-Statut : squelette non genere. Itere via `add-tech-stack` section 2.1.
+## Commandes utiles
+
+```sh
+npm install
+npm run dev      # serveur dev
+npm run build    # build prod
+npm test         # vitest
+```
