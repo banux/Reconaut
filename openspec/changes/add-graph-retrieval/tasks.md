@@ -130,9 +130,10 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 7. Self-check et observabilité — spec : `graph-retrieval`
 
-- [ ] **7.1 Routine `doctor` confirme la coïncidence de région et le mode auto-hébergeable**
+- [x] **7.1 Routine `doctor` confirme la coïncidence de région et le mode auto-hébergeable**
   - **Notes** : Étendre la commande `doctor` (cf. `add-tech-stack` §6) pour vérifier (a) AGE chargée sur la même instance Postgres que les tables OLTP, (b) région de l'instance dans la liste blanche EU, (c) `graph_lag_seconds` p95 récent < 60 s, (d) le tier graphe ne dépend pas d'un LLM externe (`external_llm_required=false` reporté dans la sortie `doctor`).
   - **Test plan** : Test qui lance `doctor` dans un environnement EU correctement configuré → exit 0 et sortie inclut `graph_tier=ok`, `external_llm_required=false` ; dans un environnement où AGE pointe vers une instance non-EU (mock) → exit ≠ 0 avec message `graph-region-not-allowed`.
+  - **Statut** : `Reconaut::Doctor` (`apps/api/app/lib/reconaut/doctor.rb`) avec 5 checks injectables : `graph_tier` (AGE chargé), `region` (allowlist EU 24 régions AWS/GCP/OVH/Scaleway/Hetzner), `graph_lag` (p95 < 60s), `graph_role_reader` (pas de droit d'écriture), `external_llm_required` (basé sur `RECONAUT_EMBEDDER_PROVIDER`). Statuts `:ok` / `:fail` / `:info` / `:unknown` ; `ok = none?(:fail)` (info + unknown non bloquants). Rake task `bin/rails reconaut:doctor` (`apps/api/lib/tasks/reconaut.rake`) imprime le rapport JSON et exit 0/1. 11 specs : happy path, AGE absente, région non-EU, région absente, lag > 60s, lag inconnu (warn), reader peut écrire, provider local/mistral, sérialisation JSON, fail-closed par défaut.
 
 - [ ] **7.2 Dashboard Grafana minimal**
   - **Notes** : Panels : `retrieval_path_total` par path, `retrieval_latency_seconds` p50/p95 par path, `graph_lag_seconds` p95/p99, `graph_unavailable_total`, `graph_template_timeout_total` par `template_id`.

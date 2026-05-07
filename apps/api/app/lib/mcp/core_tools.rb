@@ -1,0 +1,75 @@
+# frozen_string_literal: true
+
+require_relative "tool_registry"
+require_relative "../agent/hybrid_retriever"
+require_relative "../../use_cases/scopes/operations"
+
+module Mcp
+  # Set initial d'outils MCP (read-only en priorite). Les outils
+  # mutants (request_scan) viendront aux iterations suivantes une fois
+  # GoodJob cable.
+  #
+  # Cf. openspec/changes/init-reconaut-platform/specs/mcp-server/spec.md
+  # et tasks.md sections 5.1 / 5.3 (scopes par outil).
+  module CoreTools
+    module_function
+
+    def register_all!(retriever:, scope_storage:)
+      ToolRegistry.reset!
+
+      # search_hosts : delegue au HybridRetriever, expose les rows + warnings.
+      ToolRegistry.register(
+        name:   "search_hosts",
+        scopes: [:"read:hosts"],
+        params_schema: {
+          query: { type: :string, min_length: 1, max_length: 1000 },
+          limit: { type: :integer, required: false, default: 50, min: 1, max: 100 }
+        }
+      ) do |params:, caller_id:|
+        result = retriever.call(params[:query])
+        rows = Array(result.rows).first(params[:limit])
+        {
+          rows:           rows,
+          citations:      result.citations.map(&:to_h),
+          warnings:       result.warnings,
+          retrieval_path: result.retrieval_path
+        }
+      end
+
+      # get_host : lookup ponctuel par host_id. La v1 le sert depuis
+      # le retriever en passant l'id comme query exacte (le pipeline
+      # graphe matche via host_neighborhood). Quand un index dedie
+      # existera, on switchera ici.
+      ToolRegistry.register(
+        name:   "get_host",
+        scopes: [:"read:hosts"],
+        params_schema: {
+          host_id: { type: :string, min_length: 1, max_length: 64 }
+        }
+      ) do |params:, caller_id:|
+        result = retriever.call("host_id:#{params[:host_id]}")
+        host_row = Array(result.rows).find do |row|
+          (row.is_a?(Hash) ? (row["host_id"] || row[:host_id]) : nil) == params[:host_id]
+        end
+        if host_row.nil?
+          { found: false, host_id: params[:host_id] }
+        else
+          { found: true, host: host_row, citations: result.citations.map(&:to_h) }
+        end
+      end
+
+      # list_scopes : utile aux agents externes pour comprendre le
+      # perimetre declare avant d'appeler request_scan.
+      ToolRegistry.register(
+        name:   "list_scopes",
+        scopes: [:"read:scopes"],
+        params_schema: {}
+      ) do |params:, caller_id:|
+        scopes = scope_storage.list.map(&:to_h)
+        { scopes: scopes }
+      end
+
+      ToolRegistry
+    end
+  end
+end
