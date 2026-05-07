@@ -39,9 +39,10 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 3. Catalogue de templates paramétrés — spec : `graph-retrieval`
 
-- [ ] **3.1 Registry de templates et validateur de paramètres**
+- [x] **3.1 Registry de templates et validateur de paramètres**
   - **Notes** : Module Ruby `GraphTemplates::Registry` avec entrée `register(template_id:, params:, cypher:)`. Chaque `params` est un schéma typé (Sorbet ou `dry-types`). Le Cypher est statique (chaîne de caractères figée) ; l'exécution lie les paramètres comme prepared statement.
   - **Test plan** : Test qui charge le registry au boot et énumère les templates ; assure que chaque template a un schéma de paramètres et un Cypher non-vide.
+  - **Statut** : `GraphTemplates::Registry` livré avec `register`, `fetch`, `resolve`, errors typées (`UnknownTemplateError`, `MissingParamError`, `ParamTypeError`, `ParamOutOfRangeError`, `TemplateNotReadOnlyError`). Le set noyau §3.2 sera enregistré dans une itération suivante.
 
 - [ ] **3.2 Set noyau de templates (≤ 10) — read-only, depth borné à 3**
   - **Notes** : Set initial (modèle tenant unique : aucun paramètre `tenant_id`) :
@@ -57,13 +58,15 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
     10. `subsidiaries_assets(parent_org_id)` — actifs des filiales déclarées d'une organisation.
   - **Test plan** : Pour chaque template, un test fixture-driven qui (a) seed un graphe minimal, (b) appelle le template avec des paramètres valides, (c) assure le résultat attendu, (d) assure que les paramètres invalides (out-of-range, ID inexistant) sont rejetés ou retournent un résultat vide propre.
 
-- [ ] **3.3 Linter `templates_lint` (read-only enforcement)**
+- [x] **3.3 Linter `templates_lint` (read-only enforcement)**
   - **Notes** : Test CI qui parse chaque Cypher déclaré dans le registry et rejette toute occurrence (insensible à la casse, hors littéraux de chaîne) de `CREATE`, `MERGE`, `SET`, `DELETE`, `DETACH`, `REMOVE`. Échoue avec un message `template-not-readonly` nommant le template.
   - **Test plan** : Tester le linter lui-même : un template factice contenant `DETACH DELETE` est rejeté ; le set noyau passe propre.
+  - **Statut** : implémenté dans `GraphTemplates::Registry.assert_read_only!` (refus à l'enregistrement, pas seulement en CI). 6 specs : DETACH DELETE, CREATE, MERGE/SET/REMOVE, contournement par littéral de chaîne, faux positif sur identifiant `RECREATE_INDEX`. Le filtrage des littéraux retire `'...'` et `"..."` avant le match anti-clauses.
 
-- [ ] **3.4 Validation des paramètres : `depth`, `limit` plafonnés**
+- [x] **3.4 Validation des paramètres : `depth`, `limit` plafonnés**
   - **Notes** : Validateur générique : `depth ∈ [1, 3]`, `limit ∈ [1, 100]`. Hors borne → erreur `param-out-of-range`.
   - **Test plan** : Test paramétré qui appelle un template avec `depth=10` → erreur ; `depth=2` → succès.
+  - **Statut** : `GraphTemplates::Registry::PARAM_RANGES` matérialise les plages réservées ; `coerce_and_check` lève `ParamOutOfRangeError` quand on sort. Tests : depth=2 OK, depth=10 KO, depth=0 KO, limit=1000 KO, default appliqué quand `required: false`.
 
 ---
 

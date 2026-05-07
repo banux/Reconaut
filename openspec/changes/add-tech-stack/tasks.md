@@ -27,11 +27,12 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
   - **Test plan** : `bin/setup` racine installe Ruby (via `mise`/`asdf`), Node (pour Vue), Go ; `bin/test` exécute en parallèle `cd apps/api && bundle exec rspec`, `cd apps/web && pnpm test`, `cd apps/scanner && go test ./...` ; chaque suite contient un test smoke trivial qui passe.
   - **Statut** : layout en place, Rails 8 API généré, Vue 3 + Vite généré, module Go avec binaire `scanner-worker`. `bin/test` passe les 3 suites smoke. `bin/setup` build et démarre l'image Postgres dev. Reste : intégrer `packages/job-schema` côté Rails et Go (cf. §3.1), Dockerfile par sous-app (différé tant que la stack runtime n'est pas figée pour la prod).
 
-- [ ] **2.2 Pipeline CI multi-stack (GitHub Actions)**
+- [x] **2.2 Pipeline CI multi-stack (GitHub Actions)**
   - **Notes** : Jobs séparés par app : `api-rubocop`, `api-rspec`, `web-eslint`, `web-vitest`, `scanner-golangci-lint`, `scanner-go-test`, build d'image par app. Cache des dépendances (Bundler, pnpm, Go module cache `~/go/pkg/mod`) keyé par lockfile.
   - **Test plan** : Ouvrir une PR triviale ; tous les jobs verts. Introduire une violation `golangci-lint` dans un package Go et vérifier que `scanner-golangci-lint` échoue ; introduire une violation Rubocop côté Rails et vérifier que `api-rubocop` échoue.
+  - **Statut** : workflow `.github/workflows/ci.yml` livré avec 4 jobs (`stack-lint`, `api-rspec`, `web-vitest`, `scanner-go`). Cache : Bundler (via `bundler-cache: true` de `ruby/setup-ruby`), npm (via `actions/setup-node` cache), Go (cache désactivé pour l'instant tant qu'il n'y a pas de `go.sum`). Linters par sous-app (rubocop, eslint, golangci-lint) parqués pour une itération suivante : la stack n'a pas encore de code applicatif justifiant ces linters au-delà du smoke.
 
-- [ ] **2.3 Linter de stack (rejette les violations de l'exigence `architecture`)**
+- [x] **2.3 Linter de stack (rejette les violations de l'exigence `architecture`)**
   - **Notes** : Script CI `scripts/check_stack.sh` qui :
     - rejette tout fichier `.jsx`/`.tsx` ou import `react`/`@angular`/`svelte` dans `apps/web/`,
     - rejette toute gem cliente RPC vers les workers (regex sur `Gemfile.lock` pour les patterns `grpc`, `scanner-client`, etc.),
