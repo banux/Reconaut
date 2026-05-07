@@ -4,7 +4,7 @@ Statut : note de cadrage, pas un change OpenSpec. Sert à décider du périmètr
 
 ## 1. Pourquoi cette note
 
-L'agent conversationnel actuellement spécifié dans `agent-interface` repose sur un RAG vectoriel classique : embed `mistral-embed` (1024-dim) → index pgvector → top-k=5 → réponse LLM avec citations `(host_id, scanned_at)`. Ce design répond bien aux requêtes sémantiques sur du texte libre (bannières HTTP, extraits HTML, fingerprint de logiciel) mais **rate les requêtes structurelles** qui font la valeur d'un Shodan-like :
+L'agent conversationnel actuellement spécifié dans `agent-interface` repose sur un RAG vectoriel classique : embedder pluggable (par défaut un modèle local in-process, Ollama / `mistral-embed` / OpenAI-compatible activables par variable d'environnement) → index pgvector → top-k=5 → réponse LLM avec citations `(host_id, scanned_at)`. Ce design répond bien aux requêtes sémantiques sur du texte libre (bannières HTTP, extraits HTML, fingerprint de logiciel) mais **rate les requêtes structurelles** qui font la valeur d'un Shodan-like :
 
 - « Quels hôtes partagent ce certificat TLS feuille ? » (cluster de réutilisation de cert)
 - « Modbus exposés sur les domaines du périmètre déclaré » (parcours Domain → Host → Service)
@@ -22,19 +22,19 @@ Deux familles, à ne pas confondre :
 ### 2.1 Graph-RAG « index-time construction » (corpus non structuré)
 Frameworks qui partent de **texte non structuré**, demandent à un LLM d'extraire entités et relations, et construisent un graphe à l'index. Représentants :
 
-- **Microsoft GraphRAG** (Apache 2.0, Python) — extraction LLM + détection de communautés (Leiden) + résumés hiérarchiques par communauté. Coûteux en tokens à l'index (chaque chunk passe au LLM). Cible : grands corpus textuels (rapports, transcripts, bases de connaissances).
+- **Microsoft GraphRAG** (MIT, Python) — extraction LLM + détection de communautés (Leiden) + résumés hiérarchiques par communauté. Coûteux en tokens à l'index (chaque chunk passe au LLM). Cible : grands corpus textuels (rapports, transcripts, bases de connaissances).
 - **LightRAG** (HKU, MIT) — variante plus légère, retrieval dual (entité bas-niveau + thème haut-niveau).
-- **LlamaIndex Property Graph Index** — pluggable (Neo4j / Memgraph / Kuzu), extraction LLM guidée par schéma.
+- **LlamaIndex Property Graph Index** (MIT) — pluggable (Neo4j / Memgraph / Kuzu), extraction LLM guidée par schéma.
 
-**Pertinence pour Reconaut : faible.** Notre dataset est **déjà structuré** (Host, Service, Cert sont des lignes typées en base). Faire passer chaque scan au LLM pour ré-extraire des entités déjà présentes est un coût Mistral pur, sans valeur ajoutée — et augmente l'exposition GDPR (plus de données envoyées à un sous-traitant). À écarter.
+**Pertinence pour Reconaut : faible.** Notre dataset est **déjà structuré** (Host, Service, Cert sont des lignes typées en base). Faire passer chaque scan au LLM pour ré-extraire des entités déjà présentes est un coût LLM pur sans valeur ajoutée. C'est aussi **incompatible avec la promesse d'auto-hébergement sans condition** (`project.md`) : forcer un appel LLM externe à l'index transformerait le graphe en sous-produit d'un sous-traitant payant, alors que l'opérateur peut tourner aujourd'hui en réseau privé avec un embedder local. Et sur le volet RGPD, multiplier les passages au LLM augmente la quantité de données envoyées à un éventuel sous-traitant (Mistral, OpenAI-compatible) sans bénéfice. À écarter.
 
 ### 2.2 Graph-RAG « native graph data » (graphe existant)
 Le graphe est déjà là, dérivé du modèle de données métier. Le RAG = traduction LLM d'une requête naturelle en parcours de graphe (Cypher, SPARQL, Gremlin, ou un DSL maison), exécution, puis synthèse LLM avec citations sur les nœuds visités. Représentants :
 
-- **Neo4j GraphRAG** (officiel, depuis 2024) — pipeline hybride pgvector + Cypher, support natif des citations par nœud.
-- **LangChain GraphCypherQAChain** — LLM génère du Cypher à partir du langage naturel ; exécute contre Neo4j/Memgraph.
-- **Apache AGE** (extension Postgres) — donne Cypher *sur Postgres*. Mature mais moins riche que Neo4j côté algos de graphe.
-- **Kuzu** (embedded) — très rapide, modèle embedded mono-process.
+- **Neo4j GraphRAG** (package Apache 2.0, depuis 2024) — pipeline hybride pgvector + Cypher, support natif des citations par nœud. Le moteur Neo4j Community est sous **GPLv3** (auto-hébergeable), Enterprise sous licence commerciale propriétaire.
+- **LangChain GraphCypherQAChain** (MIT) — LLM génère du Cypher à partir du langage naturel ; exécute contre Neo4j/Memgraph.
+- **Apache AGE** (Apache 2.0, extension Postgres) — donne Cypher *sur Postgres*. Mature mais moins riche que Neo4j côté algos de graphe.
+- **Kuzu** (MIT, embedded) — très rapide, modèle embedded mono-process.
 
 **Pertinence pour Reconaut : forte.** C'est l'angle à creuser.
 
@@ -62,35 +62,39 @@ Arêtes intéressantes pour les requêtes :
 
 ## 4. Options techniques pour le stockage graphe
 
-| Option | Pour | Contre | Self-hostable | Cohérent avec stack Reconaut |
-|---|---|---|---|---|
-| **Apache AGE (extension Postgres)** | Reste dans Postgres existant ; pas de nouveau fournisseur ni service ; transactions globales avec les tables OLTP | Maturité moindre que Neo4j ; performance dégradée sur traversées profondes (>5 sauts) ; communauté plus petite | ✅ même cluster Postgres | ✅ aligné sur la stack figée (Postgres unique TimescaleDB+pgvector+AGE) |
-| **Neo4j Community auto-hébergé** | Outillage le plus riche, bibliothèque GraphRAG officielle, algos de graphe matures | Nouvelle DB à opérer ; périmètre d'auth/audit séparé du backend Rails ; effacement DSAR distribué à concevoir | ✅ Community Edition | ❌ casse la promesse « Postgres unique » |
-| **Memgraph auto-hébergé** | Compatible Cypher, performant, source-available | Charge opérationnelle d'auto-héberger une seconde DB ; conformité licence à vérifier | ✅ si auto-hébergé | ❌ deuxième DB à exploiter |
-| **Kuzu (embedded)** | Très rapide, pas de réseau, embedded | Embedded mono-process — couplé au binaire qui le charge ; pas adapté à un Rails monolithe + workers Go séparés | N/A | ❌ |
-| **Pure SQL/JOINs sur Postgres (pas de Cypher)** | Zéro nouveau composant ; LLM génère du SQL ; tout en ActiveRecord | Requêtes de chemin profondes très verbeuses ; pas de WITH RECURSIVE pratique pour `find_path` arbitraire | ✅ | ✅ mais perd la valeur graphe |
-| **Vue dérivée graphe-en-mémoire** (NetworkX/networkx-go chargé à la volée) | Simple ; algos riches en lib | Ne scale pas au-delà de quelques millions d'arêtes ; rechargement coûteux | ✅ | ⚠️ acceptable pour un prototype |
+Reconaut est distribué sous **AGPL-3.0-only**. Toute dépendance graphe doit être (a) auto-hébergeable sans clé propriétaire ni quota imposé par un éditeur, (b) sous une licence open source compatible avec une distribution AGPL-3.0 d'un produit qui l'embarque ou le requiert, (c) sans télémétrie sortante imposée. La colonne « Licence » ci-dessous reflète cet axe d'analyse.
+
+| Option | Licence | Pour | Contre | Self-hostable | Cohérent avec stack Reconaut |
+|---|---|---|---|---|---|
+| **Apache AGE (extension Postgres)** | Apache 2.0 | Reste dans Postgres existant ; pas de nouveau fournisseur ni service ; transactions globales avec les tables OLTP ; aucune télémétrie sortante | Maturité moindre que Neo4j ; performance dégradée sur traversées profondes (>5 sauts) ; communauté plus petite | ✅ même cluster Postgres | ✅ aligné sur la stack figée (Postgres unique TimescaleDB+pgvector+AGE) |
+| **Neo4j Community auto-hébergé** | GPLv3 (Community) — Enterprise propriétaire | Outillage le plus riche, bibliothèque GraphRAG officielle, algos de graphe matures | Nouvelle DB à opérer ; périmètre d'auth/audit séparé du backend Rails ; effacement DSAR distribué à concevoir ; les algos avancés (GDS production) sont en Enterprise propriétaire — incohérent avec « auto-hébergement sans condition » s'ils deviennent nécessaires | ✅ Community Edition | ❌ casse la promesse « Postgres unique » |
+| **Memgraph auto-hébergé** | **BSL 1.1** (conversion Apache 2.0 différée) + MAGE Apache 2.0 | Compatible Cypher, performant, ancrage Postgres natif via connecteurs | **Licence Business Source non-OSI** : restrictions d'usage commercial concurrent jusqu'à conversion, mal vue dans l'écosystème open source et incohérente avec l'esprit AGPL-3.0 du projet ; charge opérationnelle d'une seconde DB | ⚠️ techniquement oui mais sous BSL | ❌ deuxième DB + risque de message contradictoire « open source » |
+| **Kuzu (embedded)** | MIT | Très rapide, pas de réseau, embedded ; licence très permissive | Embedded mono-process — couplé au binaire qui le charge ; pas adapté à un Rails monolithe + workers Go séparés | N/A | ❌ |
+| **Pure SQL/JOINs sur Postgres (pas de Cypher)** | PostgreSQL (Postgres) | Zéro nouveau composant ; LLM génère du SQL ; tout en ActiveRecord | Requêtes de chemin profondes très verbeuses ; pas de WITH RECURSIVE pratique pour `find_path` arbitraire | ✅ | ✅ mais perd la valeur graphe |
+| **Vue dérivée graphe-en-mémoire** (NetworkX/gonum, chargé à la volée) | BSD-3 (NetworkX) / BSD-3 (gonum) | Simple ; algos riches en lib ; aucune nouvelle dépendance persistante | Ne scale pas au-delà de quelques millions d'arêtes ; rechargement coûteux | ✅ | ⚠️ acceptable pour un prototype |
 
 ## 5. Architecture pressentie pour Reconaut
 
 **Hybrid retrieval, AGE-first, vector-secondary** :
 
-1. **Conserver pgvector + `mistral-embed`** pour le rappel sémantique sur les champs textuels libres (bannière, extrait HTML, fingerprint logiciel). Inchangé par rapport à `agent-interface`.
-2. **Ajouter Apache AGE** sur le même cluster Postgres pour matérialiser le graphe d'actifs. Les nœuds AGE sont des lignes Postgres → la RLS de `platform/spec.md` s'applique sans modification → cohérent avec la décision multi-actif EU (réplication via WAL Postgres standard) → conforme à la contrainte de l'isolation à la couche la plus basse.
+1. **Conserver pgvector + l'embedder pluggable** (modèle local par défaut, Ollama / `mistral-embed` / OpenAI-compatible activables par env, cf. `project.md`) pour le rappel sémantique sur les champs textuels libres (bannière, extrait HTML, fingerprint logiciel). Inchangé par rapport à `agent-interface`.
+2. **Ajouter Apache AGE** sur le même cluster Postgres pour matérialiser le graphe d'actifs. Apache 2.0, donc compatible avec une distribution AGPL-3.0 du produit. Les nœuds AGE sont des lignes Postgres → la RLS de `platform/spec.md` s'applique sans modification → cohérent avec la décision multi-actif EU (réplication via WAL Postgres standard) → conforme à la contrainte de l'isolation à la couche la plus basse, et zéro nouveau service à auto-héberger pour l'opérateur.
 3. **Pipeline de retrieval** dans l'agent :
-   - Décomposition de la requête utilisateur (LLM Mistral) en deux composantes : une partie sémantique (mots-clés) + une partie structurelle (entités nommées, relations).
+   - Décomposition de la requête utilisateur (LLM choisi par l'opérateur, par défaut local) en deux composantes : une partie sémantique (mots-clés) + une partie structurelle (entités nommées, relations).
    - Récupération vectorielle sur la partie sémantique → ensemble candidat de `host_id`.
    - Parcours graphe ancré sur cet ensemble (Cypher sur AGE) → sous-graphe contextuel (1–3 sauts).
    - Le LLM produit la réponse avec citations sur les nœuds visités du sous-graphe.
 4. **Outils MCP** pour exposer le graphe aux agents externes (futur change `add-graph-mcp-tools`) : `get_neighbors(node_id, depth)`, `find_certificate_cluster(cert_sha256)`, `find_path(from, to, max_depth)`.
-5. **Pas d'extraction LLM à l'index**. Le graphe est dérivé déterministiquement des données de scan déjà structurées. Aucun token Mistral consommé pour construire le graphe.
+5. **Pas d'extraction LLM à l'index**. Le graphe est dérivé déterministiquement des données de scan déjà structurées. Aucun token d'embedder externe consommé pour construire le graphe ; une instance configurée 100 % local reste 100 % local.
 
 ## 6. Implications cross-cutting
 
 - **GDPR / effacement par identifiant** : la cohérence du workflow d'effacement par identifiant (cf. `gdpr-compliance`) exige que la suppression d'un `host_id` retire les nœuds *et* les arêtes du graphe. Avec AGE = même transaction Postgres que la suppression des lignes scalaires → cohérence triviale. Avec Neo4j séparé = workflow de suppression distribué à concevoir + tester.
 - **Audit** : les requêtes Cypher générées par LLM doivent être journalisées (texte de la requête, durée, nombre de nœuds touchés). Risque d'injection Cypher = LLM peut générer des requêtes destructives (`DETACH DELETE`). Mitigation : runtime read-only pour les requêtes d'agent, allowlist de patterns Cypher, ou DSL restreint plutôt que Cypher brut.
 - **Stack** : AGE = extension Postgres → s'installe via `CREATE EXTENSION age`, pas de service supplémentaire à déployer. Cohérent avec le change `add-tech-stack` (Rails 8 monolithe + workers Go + GoodJob). Côté Rails, gem `activerecord-age` ou requêtes brutes via `ActiveRecord::Base.connection.execute`.
-- **Coût** : zéro coût marginal Mistral pour la construction du graphe (vs MS GraphRAG qui coûte des centaines de dollars en tokens pour un corpus moyen). Coût LLM uniquement à la requête, comme aujourd'hui.
+- **Licence et écosystème open source** : Apache AGE (Apache 2.0) est compatible avec une distribution Reconaut sous AGPL-3.0-only et avec la promesse « auto-hébergement sans condition » (`project.md`). À l'inverse, Memgraph (BSL 1.1) introduirait une dépendance non-OSI dans la chaîne dont l'opérateur dépend pour faire tourner le produit, ce qui contredit l'esprit du projet ; et l'écosystème Neo4j pousse vers Enterprise (propriétaire) dès qu'on touche aux algos avancés (GDS production-grade). AGE évite les deux pièges.
+- **Auto-hébergement sans condition** : avec AGE, l'opérateur peut tourner 100 % en réseau privé — graphe inclus. Aucun appel sortant n'est requis pour construire ou interroger le graphe ; les seuls appels LLM possibles restent ceux de l'embedder/agent que l'opérateur a explicitement configurés (modèle local par défaut). Ajouter un moteur graphe externe (cloud Neo4j AuraDB, cloud Memgraph, etc.) casserait cette propriété — donc explicitement hors scope.
+- **Coût** : zéro coût marginal d'embedder pour la construction du graphe (vs MS GraphRAG qui coûte des centaines de dollars en tokens pour un corpus moyen, et qui surtout *exige* un fournisseur LLM externe). Coût LLM uniquement à la requête, et uniquement si l'opérateur a configuré un embedder/LLM payant — sinon zéro.
 
 ## 7. Recommandation
 
@@ -99,8 +103,10 @@ Arêtes intéressantes pour les requêtes :
 **Phase 2 (change `add-graph-mcp-tools`)** : exposer les outils MCP de parcours après que le pipeline interne soit stable.
 
 **À NE PAS faire** :
-- Construire un graphe via extraction LLM à l'index (MS GraphRAG style) — coût et exposition GDPR sans bénéfice.
-- Adopter Neo4j en v1 — recrée un périmètre d'auth, casse l'invariant « isolation à la couche la plus basse », alourdit la conformité multi-actif EU.
+- Construire un graphe via extraction LLM à l'index (MS GraphRAG style) — coût, exposition GDPR sans bénéfice, et incompatibilité avec une instance auto-hébergée 100 % réseau privé.
+- Adopter Neo4j en v1 — recrée un périmètre d'auth, casse l'invariant « isolation à la couche la plus basse », alourdit la conformité multi-actif EU, et expose à la pression « passe en Enterprise propriétaire » dès qu'on veut des algos avancés.
+- Adopter Memgraph en v1 — la licence BSL 1.1 (non-OSI) est en porte-à-faux avec l'identité open source AGPL-3.0 du projet et la promesse d'auto-hébergement sans condition.
+- Adopter un service graphe managé propriétaire (Neo4j AuraDB, Memgraph Cloud, TigerGraph Cloud, etc.) — casse frontalement la promesse d'auto-hébergement et réintroduit un sous-traitant Art. 28.
 - Laisser le LLM générer du Cypher arbitraire — risque d'injection et d'erreurs silencieuses.
 
 ## 8. Questions ouvertes (à trancher au change `add-graph-retrieval`)
@@ -113,11 +119,12 @@ Arêtes intéressantes pour les requêtes :
 
 ## 9. Sources et frameworks à étudier plus en profondeur (avant le change)
 
-- Microsoft GraphRAG — pour comprendre l'approche communauté/résumé (mais à ne pas adopter telle quelle).
-- Neo4j GraphRAG package — patterns hybrides vector + graph que l'on peut reproduire sur AGE.
-- Apache AGE — vérifier la compatibilité avec TimescaleDB sur le même cluster, performance de Cypher sur des graphes 10–100 M arêtes, support de la réplication logique multi-actif.
-- LangChain GraphCypherQAChain — patron de génération guidée vs templates.
+- Microsoft GraphRAG (MIT) — pour comprendre l'approche communauté/résumé (mais à ne pas adopter telle quelle).
+- Neo4j GraphRAG package (Apache 2.0) — patterns hybrides vector + graph que l'on peut reproduire sur AGE, indépendamment du moteur Neo4j.
+- Apache AGE (Apache 2.0) — vérifier la compatibilité avec TimescaleDB sur le même cluster, performance de Cypher sur des graphes 10–100 M arêtes, support de la réplication logique multi-actif.
+- LangChain GraphCypherQAChain (MIT) — patron de génération guidée vs templates.
 - Article original « From Local to Global: A GraphRAG Approach » (Microsoft, 2024) — pour la terminologie partagée.
+- Revue licence des dépendances ajoutées par le change — toute nouvelle gem Ruby / module Go embarqué avec le produit doit être OSI-approved et compatible AGPL-3.0 (proscrire BSL, SSPL, Elastic License v2, Commons Clause).
 
 ---
 
