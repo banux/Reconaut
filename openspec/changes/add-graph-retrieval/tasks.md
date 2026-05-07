@@ -23,8 +23,8 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 ## 2. Pipeline d'ingestion → projection graphe — spec : `graph-retrieval`
 
 - [ ] **2.1 Projection déterministe à partir des résultats de scan**
-  - **Notes** : Service `GraphProjector` dans Rails appelé après chaque ingestion de `ScanResultV1` (cf. `add-tech-stack`). Utilise upsert idempotent (Cypher `MERGE`) pour les nœuds et arêtes. Aucun appel `Embedder` / Mistral dans ce chemin.
-  - **Test plan** : Test d'unité qui passe un `ScanResultV1` synthétique (Host H1, Service Modbus S1, Certificate C1 partagé avec H2 préexistant) et assure que le graphe contient les nœuds et arêtes attendus après une seule transaction. Test contractuel : mock outbound Mistral est attaché → 0 appel observé.
+  - **Notes** : Service `GraphProjector` dans Rails appelé après chaque ingestion de `ScanResultV1` (cf. `add-tech-stack`). Utilise upsert idempotent (Cypher `MERGE`) pour les nœuds et arêtes. Aucun appel à l'interface `Embedder` ni à un client LLM externe (Ollama, Mistral, OpenAI-compatible, Anthropic, etc.) dans ce chemin.
+  - **Test plan** : Test d'unité qui passe un `ScanResultV1` synthétique (Host H1, Service Modbus S1, Certificate C1 partagé avec H2 préexistant) et assure que le graphe contient les nœuds et arêtes attendus après une seule transaction. Test contractuel : mock outbound (WebMock + sniffing socket) attaché → 0 appel observé vers tout endpoint réseau, quel que soit le provider d'embedder configuré dans le test.
 
 - [ ] **2.2 Idempotence de la projection**
   - **Notes** : Réingérer le même scan ne DOIT pas dupliquer les arêtes. `MERGE` sur les clés naturelles (`host_id`, `cert_sha256`, etc.).
@@ -116,9 +116,9 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 7. Self-check et observabilité — spec : `graph-retrieval`
 
-- [ ] **7.1 Routine `doctor` confirme la coïncidence de région**
-  - **Notes** : Étendre la commande `doctor` (cf. `add-tech-stack` §6) pour vérifier (a) AGE chargée sur la même instance Postgres que les tables OLTP, (b) région de l'instance dans la liste blanche EU, (c) `graph_lag_seconds` p95 récent < 60 s.
-  - **Test plan** : Test qui lance `doctor` dans un environnement EU correctement configuré → exit 0 ; dans un environnement où AGE pointe vers une instance non-EU (mock) → exit ≠ 0 avec message `graph-region-not-allowed`.
+- [ ] **7.1 Routine `doctor` confirme la coïncidence de région et le mode auto-hébergeable**
+  - **Notes** : Étendre la commande `doctor` (cf. `add-tech-stack` §6) pour vérifier (a) AGE chargée sur la même instance Postgres que les tables OLTP, (b) région de l'instance dans la liste blanche EU, (c) `graph_lag_seconds` p95 récent < 60 s, (d) le tier graphe ne dépend pas d'un LLM externe (`external_llm_required=false` reporté dans la sortie `doctor`).
+  - **Test plan** : Test qui lance `doctor` dans un environnement EU correctement configuré → exit 0 et sortie inclut `graph_tier=ok`, `external_llm_required=false` ; dans un environnement où AGE pointe vers une instance non-EU (mock) → exit ≠ 0 avec message `graph-region-not-allowed`.
 
 - [ ] **7.2 Dashboard Grafana minimal**
   - **Notes** : Panels : `retrieval_path_total` par path, `retrieval_latency_seconds` p50/p95 par path, `graph_lag_seconds` p95/p99, `graph_unavailable_total`, `graph_template_timeout_total` par `template_id`.
@@ -137,10 +137,24 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ---
 
+## 9. Conformité open source / licence
+
+- [ ] **9.1 Audit de licence des nouvelles dépendances**
+  - **Notes** : Tour de table avec `license_finder` (Ruby) et un équivalent Go sur les modules ajoutés. Toute dépendance NON OSI-approved ou NON compatible AGPL-3.0 (BSL, SSPL, Elastic License v2, Commons Clause, propriétaire) DOIT être rejetée.
+  - **Test plan** : CI exécute `license_finder action_items` et l'équivalent Go ; échec si la liste retourne quoi que ce soit.
+
+- [ ] **9.2 Test « instance air-gappée »**
+  - **Notes** : Test d'intégration en CI qui démarre une instance Reconaut avec embedder local + sortie réseau bloquée (NetworkPolicy / iptables DROP en sortie sauf vers la DB). Ingère un scan synthétique, exécute chaque template du set noyau.
+  - **Test plan** : (a) toutes les opérations réussissent, (b) aucun paquet sortant vers une IP publique n'est observé (compteur d'iptables ou hook eBPF), (c) `doctor` rapporte `external_llm_required=false`.
+
+---
+
 ## Acceptation pour le change dans son ensemble
 
 - [ ] Chaque exigence des spec deltas `graph-retrieval` et `agent-interface` a au moins un test automatisé passant en CI.
 - [ ] Le linter `templates_lint` tourne en CI sur chaque PR et bloque toute fusion qui introduit un template mutant ou une clause Cypher générée à la main hors registry.
-- [ ] La routine `doctor` confirme : extension AGE chargée, région EU, retard de projection p95 < 60 s, rôle reader sans privilège d'écriture.
+- [ ] La routine `doctor` confirme : extension AGE chargée, région EU, retard de projection p95 < 60 s, rôle reader sans privilège d'écriture, et `external_llm_required=false`.
 - [ ] Le workflow DSAR existant supprime atomiquement les lignes scalaires ET les nœuds graphe dans toutes les régions EU actives ; le test multi-région passe.
-- [ ] Aucun appel Mistral n'est observable dans le chemin de projection graphe (test contractuel avec mock outbound).
+- [ ] Aucun appel à un embedder ou LLM externe n'est observable dans le chemin de projection graphe (test contractuel avec mock outbound, indépendant du provider configuré).
+- [ ] Le test « instance air-gappée » passe : ingestion + interrogation du graphe sans aucun appel réseau sortant.
+- [ ] L'audit de licence en CI est vert ; aucune dépendance BSL/SSPL/proprio introduite par le change.

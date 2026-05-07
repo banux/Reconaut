@@ -9,12 +9,27 @@ La plateforme DOIT matérialiser un graphe d'actifs dérivé déterministiquemen
 - **GIVEN** un résultat de scan ingéré contenant un nouvel hôte `H1` avec un service Modbus `S1` et un certificat `C1` partagé avec un hôte existant `H2`
 - **WHEN** le pipeline d'ingestion termine la transaction
 - **THEN** le graphe contient les nœuds `Host(H1)`, `Service(S1)`, `Certificate(C1)` et les arêtes `EXPOSES(H1→S1)`, `PRESENTS(H1→C1)`, `PRESENTS(H2→C1)`
-- **AND** aucun appel à l'API Mistral n'a été effectué pendant l'ingestion (vérifié par mock outbound dans le test)
+- **AND** aucun appel à un embedder ou LLM externe n'a été effectué pendant l'ingestion (vérifié par mock outbound qui assert zéro requête, quel que soit l'embedder configuré)
 
 #### Scenario: Aucune extraction LLM dans le chemin d'index
 - **GIVEN** une revue automatisée du code d'ingestion
 - **WHEN** le linter scanne les imports et les appels sortants du code de projection graphe
-- **THEN** aucun appel à `Embedder`, `MistralClient` ou tout autre client LLM n'est observé dans le chemin de construction du graphe
+- **THEN** aucun appel à l'interface `Embedder`, à un client LLM (Ollama, Mistral, OpenAI-compatible, Anthropic, etc.) ou à tout endpoint réseau extérieur n'est observé dans le chemin de construction du graphe
+
+### Requirement: Self-Hostable Graph Tier with No Mandatory External LLM
+La couche graphe DOIT pouvoir tourner intégralement sur une instance Reconaut configurée 100 % réseau privé (embedder local, aucun LLM externe configuré). Aucune fonctionnalité de la capacité `graph-retrieval` ne DOIT exiger un appel LLM externe pour fonctionner — ni à l'ingestion, ni au démarrage, ni pour le bootstrap du schéma graphe.
+
+#### Scenario: Instance air-gappée construit et interroge le graphe
+- **GIVEN** une instance Reconaut configurée avec l'embedder local par défaut et **aucun** LLM externe configuré (`AGENT_LLM_PROVIDER=local` ou équivalent), avec sortie internet bloquée par firewall pendant le test
+- **WHEN** des scans sont ingérés et l'opérateur exécute des templates depuis l'UI ou l'API
+- **THEN** la projection graphe s'effectue sans erreur réseau et les templates renvoient des résultats
+- **AND** la routine `doctor` rapporte `graph_tier=ok` et `external_llm_required=false`
+
+#### Scenario: Dépendances graphe compatibles AGPL-3.0
+- **GIVEN** la liste des dépendances ajoutées par ce change (extension Postgres, gems Ruby, modules Go)
+- **WHEN** un audit de licence (`license_finder` ou équivalent) tourne en CI
+- **THEN** chaque dépendance porte une licence OSI-approved compatible AGPL-3.0 (Apache 2.0, MIT, BSD-2/3, MPL 2.0, LGPL, GPL, AGPL)
+- **AND** aucune dépendance sous BSL, SSPL, Elastic License v2, Commons Clause, ou licence propriétaire n'est introduite
 
 ### Requirement: Bounded Graph Staleness
 La projection graphe DOIT refléter l'état des données de scan ingérées avec une staleness bornée. Cible : `p95(graph_lag_seconds) < 60 s`, `p99 < 300 s` mesurée entre l'horodatage d'ingestion d'un scan et la disponibilité de ses nœuds/arêtes en lecture par les templates.
@@ -72,7 +87,7 @@ L'agent DOIT exécuter un pipeline de retrieval hybride composant rappel vectori
 #### Scenario: Requête sémantique pure conserve le chemin vectoriel
 - **GIVEN** un utilisateur soumet « serveurs nginx 1.18 vulnérables »
 - **WHEN** le pipeline traite la requête
-- **THEN** le rappel vectoriel sur `mistral-embed` retourne des candidats par similarité de bannière
+- **THEN** le rappel vectoriel via l'`Embedder` configuré (modèle local par défaut, ou Ollama / `mistral-embed` / OpenAI-compatible si l'opérateur l'a activé) retourne des candidats par similarité de bannière
 - **AND** la métrique `retrieval_path{path="vector"}` est incrémentée
 - **AND** le chemin graphe peut additionnellement enrichir le contexte (CPE→Vulnerability) sans changer l'ensemble candidat
 
