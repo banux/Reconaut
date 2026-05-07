@@ -76,9 +76,10 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
   - **Notes** : Package Go `cmd/scanner-worker` qui (a) ouvre une connexion `pgx` au cluster Postgres, (b) loop `SELECT ... FROM good_jobs WHERE finished_at IS NULL AND queue_name = 'scan' FOR UPDATE SKIP LOCKED` (avec `LIMIT 1`), (c) parse `serialized_params` JSON contre `ScanJobV1`, (d) effectue un no-op de scan en v1 (placeholder pour les vrais sondeurs livrés au change `scan-engine`), (e) écrit le résultat en table métier puis update la ligne `good_jobs` avec `finished_at = NOW()`. Idempotence : table de déduplication par `idempotency_key` ou `INSERT ... ON CONFLICT DO NOTHING` côté résultats.
   - **Test plan** : Test d'intégration lance 2 workers Go sur la même DB, enqueue 100 jobs (dont 10 doublons par `idempotency_key`) ; assure que (a) tous les jobs uniques sont traités, (b) les doublons sont détectés et acquittés sans seconde écriture, (c) la charge est répartie (chaque worker traite > 30 % du volume unique).
 
-- [ ] **5.2 Gestion de panique sans contamination**
+- [x] **5.2 Gestion de panique sans contamination**
   - **Notes** : Un panic dans la consommation d'un message ne tue pas le worker entier ; chaque job tourne dans une goroutine avec `recover()`, le job est retried selon la politique GoodJob après N tentatives le job va en `failed_executions`.
   - **Test plan** : Injecter un message qui force un panic dans un sondeur ; assurer que (a) le worker continue de consommer les messages suivants, (b) après 3 tentatives la ligne `good_jobs` correspondante est marquée avec `error` non-null et `finished_at` posé (rangée dans la liste des jobs échoués affichée par le dashboard GoodJob), (c) un compteur Prometheus `scan_worker_panics_total` est incrémenté.
+  - **Statut** : `apps/scanner/internal/worker/dispatch.go` livre `SafeRun(ctx, handler, panicCounter) error` qui capture les panics via `defer recover()` et renvoie un `*PanicError` (valeur + stack). Interface `PanicCounter` injectable (cibles Prometheus en prod, `NoopCounter` en dev/tests). 7 tests : happy path, propagation d'erreur sans incrément, panic string, panic runtime (nil map), nil handler, `KeepsConsumingAfterPanic` (5 jobs dont 1 panique → 4 traités, 1 panic compté), context.Canceled préservé. Le câblage `good_jobs.error` + retry suivra avec le runtime § 5.1.
 
 ---
 
