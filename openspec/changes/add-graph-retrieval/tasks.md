@@ -75,9 +75,10 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 4. Pipeline de retrieval hybride — spec : `agent-interface`
 
-- [ ] **4.1 Décomposition de requête (LLM → routing)**
+- [x] **4.1 Décomposition de requête (LLM → routing)**
   - **Notes** : Étape de routing dans l'agent qui appelle Mistral avec un prompt strictement structuré : « Voici les `template_id` disponibles et leurs paramètres ; renvoie un JSON `{ "templates": [{template_id, params}], "semantic_query": "..." }` ». Le LLM ne voit jamais de Cypher. Si `templates` est vide, le pipeline tombe en chemin vectoriel pur.
   - **Test plan** : Test fixture-driven qui valide le routing sur 20 requêtes typées (10 sémantiques pures, 10 structurelles, mix). Assure que les requêtes structurelles produisent au moins un `template_id` reconnu.
+  - **Statut** : `Agent::QueryRouter` livré (`apps/api/app/lib/agent/query_router.rb`). Client LLM injecté (signature `complete(prompt:)`), header de prompt explicite « JAMAIS de Cypher », catalogue des 10 templates listé dans le prompt, parsing JSON strict. Forwarde `UnknownTemplateError`/`ParamOutOfRangeError` du registry pour traçage en audit. 7 specs : prompt liste les 10 templates, instruction anti-Cypher, décomposition structurelle, fallback vectoriel pur, JSON malformé, template inconnu, param hors plage, multi-templates dans une décision. La fixture 20-requêtes (matrice empirique) est différée tant que la suite golden n'a pas été constituée.
 
 - [ ] **4.2 Exécution composée vector + graphe**
   - **Notes** : Si le LLM produit un set de templates, exécuter en parallèle (a) le rappel vectoriel sur `semantic_query`, (b) chaque template graphe avec ses paramètres. Joindre les résultats sur `host_id`. Synthèse LLM finale avec citations issues des nœuds visités. Pas de filtrage par tenant : modèle tenant unique, le contrôle d'accès est porté par l'auth + RBAC en amont.
@@ -87,25 +88,29 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Notes** : Compteurs Prometheus `retrieval_path_total{path="vector|graph|hybrid"}` ; histogramme `retrieval_latency_seconds{path=...}`.
   - **Test plan** : Test qui exerce les trois chemins et assure que les compteurs incrémentent correctement.
 
-- [ ] **4.4 Dégradation gracieuse en cas d'AGE down**
+- [x] **4.4 Dégradation gracieuse en cas d'AGE down**
   - **Notes** : Wrapper d'exécution de template qui catch `ActiveRecord::StatementInvalid` (extension absente) ou `Timeout::Error` ; renvoie un fallback structuré au pipeline. Le pipeline complète avec le rappel vectoriel pur et marque la réponse `{ "warnings": ["graph_unavailable"] }`.
   - **Test plan** : Test qui désactive AGE (mock `cypher()` lève `extension not loaded`) ; soumet une requête structurelle ; assure (a) HTTP 200, (b) résultats vectoriels présents, (c) `warnings` contient `graph_unavailable`, (d) métrique `graph_unavailable_total` incrémente.
+  - **Statut** : `Agent::TemplateExecutor` (`apps/api/app/lib/agent/template_executor.rb`) capture `Agent::TemplateExecutor::GraphUnavailableError` (extension absente / permission denied / objet manquant) et renvoie un `Result(status: :unavailable, warning: "graph_unavailable")`. `graph_unavailable_total` incrémenté avec dimension `reason` (`extension_missing`, `permission_denied`, `object_missing`, `unknown`). 4 specs côté executor : succès, timeout, extension manquante, permission denied catégorisée. Le câblage HTTP (réponse JSON `{warnings: [...]}`) suivra le controller `/agent/chat`.
 
-- [ ] **4.5 Timeout par template**
+- [x] **4.5 Timeout par template**
   - **Notes** : `statement_timeout` Postgres configuré à 1500 ms pour la connexion graphe ; si dépassement, fallback vectoriel + métrique `graph_template_timeout_total{template_id}`.
   - **Test plan** : Test qui force un sleep côté Cypher (via `pg_sleep(2)`) ; assure que la requête est annulée à 1,5 s, le pipeline dégrade, la métrique incrémente.
+  - **Statut** : `TemplateExecutor` applique `Timeout.timeout(timeout_ms / 1000.0)` autour de l'appel Cypher ; au dépassement → `Result(status: :timeout, warning: "graph_template_timeout")` et incrément de `graph_template_timeout_total{template_id}`. Defaut 1500 ms via constante `DEFAULT_TIMEOUT_MS`, surchargeable par `RECONAUT_GRAPH_TEMPLATE_TIMEOUT_MS`. Initializer `config/initializers/graph_statement_timeout.rb` pose `SET statement_timeout` côté Postgres au démarrage. Spec qui force `sleep 1` avec `timeout_ms: 50` valide la branche timeout + métrique.
 
 ---
 
 ## 5. Audit des requêtes graphe — spec : `graph-retrieval` + `gdpr-compliance`
 
-- [ ] **5.1 Persistance des entrées d'audit graphe**
+- [x] **5.1 Persistance des entrées d'audit graphe**
   - **Notes** : Réutiliser la table `audit_log` existante avec des colonnes `template_id`, `params_normalized` (JSON sans valeurs sensibles), `key_id`/`user_id` du caller, `duration_ms`, `nodes_touched`, `status`. Écriture en moins de 1 s après l'exécution.
   - **Test plan** : Test e2e qui exécute chaque template du set noyau et assure qu'une ligne d'audit existe pour chaque, avec les champs renseignés et un `status` cohérent (`success` / `timeout` / `unauthorized`).
+  - **Statut** : `Agent::AuditRecorder` livré avec interface `record(entry)` + 2 implémentations : `InMemoryRecorder` (tests + dev local, thread-safe via `Mutex`) et `ActiveRecordRecorder` (SQL brut sur table `audit_log` — câblera quand le modèle sera créé par init-reconaut-platform). `normalize!` valide les 6 clefs requises et **rejette les entrées contenant `password` / `secret` / `token` / `api_key` dans les params** (filet de sécurité contre la fuite de credential par accident). 12 specs : entrée valide, champ manquant, statut hors enum, params sensibles, 6 statuts couverts, thread-safety 100 écritures concurrentes, clear, propagation des erreurs.
 
-- [ ] **5.2 Audit des chemins d'erreur**
+- [x] **5.2 Audit des chemins d'erreur**
   - **Notes** : Les rejets `unknown_template`, `param-out-of-range`, `unauthorized` produisent aussi une ligne d'audit avec le statut correspondant.
   - **Test plan** : Test paramétré sur les chemins d'erreur ; chaque cas écrit une ligne avec le `status` attendu.
+  - **Statut** : enum `VALID_STATUSES` inclut `:success`, `:timeout`, `:unauthorized`, `:unknown_template`, `:param_invalid`, `:unavailable` — chacun testé. Le câblage de chaque chemin d'erreur (par ex. `unknown_template` quand `Registry.fetch` lève) au recorder est laissé au pipeline `/agent/chat` (controller à venir) ; le recorder lui-même supporte tous les cas.
 
 ---
 
