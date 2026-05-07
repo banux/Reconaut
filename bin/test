@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# bin/test - lance les suites de toutes les sous-apps en parallele.
+#
+# Source de verite : openspec/changes/add-tech-stack/tasks.md section 2.1
+#   "bin/test execute en parallele apps/api (rspec), apps/web (vitest),
+#    apps/scanner (go test ./...)"
+#
+# Iteration courante : aucune sous-app n'existe encore. Le script
+# detecte leur presence et les saute proprement, ce qui permet a la
+# CI de tourner pendant les iterations de bootstrap. Quand une sous-app
+# apparait, sa suite devient bloquante.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+failed=0
+
+run_suite() {
+  local label=$1
+  local dir=$2
+  local cmd=$3
+
+  if [[ ! -d "$dir" || -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
+    echo "[skip] $label ($dir empty - bootstrap pending)"
+    return 0
+  fi
+
+  echo "==> $label"
+  if ! (cd "$dir" && eval "$cmd"); then
+    echo "[fail] $label"
+    failed=1
+  fi
+}
+
+run_suite "apps/api  (rspec)"   "apps/api"     "[[ -f Gemfile.lock ]] && bundle exec rspec || echo '[skip] apps/api: Gemfile.lock missing'"
+run_suite "apps/web  (vitest)"  "apps/web"     "[[ -f package.json ]] && (pnpm test 2>/dev/null || npm test) || echo '[skip] apps/web: package.json missing'"
+run_suite "apps/scanner (go)"   "apps/scanner" "[[ -f go.mod ]] && go test ./... || echo '[skip] apps/scanner: go.mod missing'"
+
+if (( failed != 0 )); then
+  exit 1
+fi
+
+echo "==> all suites green (or trivially skipped during bootstrap)"

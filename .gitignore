@@ -1,3 +1,30 @@
 config.json
 models/
 vectors.db
+
+# OS / editeurs
+.DS_Store
+*.swp
+
+# Rails (apps/api/)
+apps/api/.bundle/
+apps/api/log/
+apps/api/tmp/
+apps/api/storage/
+apps/api/coverage/
+apps/api/.env*
+!apps/api/.env.example
+
+# Vue / Vite (apps/web/)
+apps/web/node_modules/
+apps/web/dist/
+apps/web/.vite/
+apps/web/coverage/
+
+# Go (apps/scanner/)
+apps/scanner/bin/
+apps/scanner/coverage.out
+
+# Docker / Postgres
+*.log
+

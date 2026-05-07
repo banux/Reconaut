@@ -1,0 +1,30 @@
+# Reconaut - dev local
+#
+# Source de verite : openspec/changes/add-tech-stack/specs/architecture/spec.md
+# (stack Vue + Rails + Go + GoodJob + Postgres unique). En v1 :
+#  - aucun broker externe (pas de Redis / RabbitMQ / NATS / Kafka)
+#  - aucun stockage objet (pas de MinIO / S3)
+#  - Postgres unique avec TimescaleDB + pgvector + AGE
+
+services:
+  postgres:
+    build: ./ops/postgres
+    image: reconaut/postgres:dev
+    container_name: reconaut-postgres
+    environment:
+      POSTGRES_DB: reconaut_development
+      POSTGRES_USER: reconaut
+      POSTGRES_PASSWORD: reconaut_dev_password
+    volumes:
+      - postgres_data:/home/postgres/pgdata/data
+      - ./ops/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reconaut -d reconaut_development"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres_data:

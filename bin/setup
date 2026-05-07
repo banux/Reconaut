@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# bin/setup - bootstrap dev local
+#
+# Source de verite : openspec/changes/add-tech-stack/tasks.md section 2.1
+#   "bin/setup racine installe Ruby (via mise/asdf), Node (pour Vue), Go"
+#
+# Iteration courante : squelette. Les sous-apps ne sont pas encore
+# bootstrapees ; les blocs commentes ci-dessous seront actives quand
+# apps/api (Rails 8), apps/web (Vue 3) et apps/scanner (Go) seront
+# generes.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "==> reconaut: bin/setup (iteration bootstrap minimal)"
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker is required (https://docs.docker.com/engine/install/)" >&2
+  exit 1
+fi
+
+echo "==> building postgres dev image (Postgres 16 + TimescaleDB + pgvector + Apache AGE)"
+docker compose build postgres
+
+echo "==> starting postgres"
+docker compose up -d postgres
+
+# Bloc actif quand apps/api existera :
+# (cd apps/api && bundle install)
+
+# Bloc actif quand apps/web existera :
+# (cd apps/web && pnpm install)
+
+# Bloc actif quand apps/scanner existera :
+# (cd apps/scanner && go mod download)
+
+echo "==> setup ok (iteration bootstrap)"
