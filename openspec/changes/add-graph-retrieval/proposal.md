@@ -4,7 +4,7 @@
 La spec `agent-interface` initialisée par `init-reconaut-platform` repose sur un RAG vectoriel pur : `mistral-embed` + pgvector + top-k=5. Cette stack répond bien aux requêtes sémantiques sur du texte libre (bannières, extraits HTML, fingerprints) mais rate les requêtes **structurelles** qui font la valeur d'un Shodan-like européen :
 
 - « Quels hôtes partagent ce certificat TLS feuille ? » (cluster de réutilisation de cert)
-- « Modbus exposés appartenant aux filiales du tenant X » (chaîne tenant → domaines → hôtes → services)
+- « Modbus exposés sur les domaines du périmètre déclaré » (chaîne Domain → Host → Service)
 - « Voisinage réseau d'un hôte compromis » (AS + range IP + cert cluster, multi-saut)
 - « Hôtes hébergeant une CVE critique sur un service public » (jointure CPE → vulnérabilité)
 
@@ -17,15 +17,15 @@ Ce change formalise l'adoption d'une couche de retrieval graphe **complémentair
 ## Ce qui change
 
 1. **Nouvelle capacité `graph-retrieval`** :
-   - Projection graphe du modèle de scan (Tenant, Domain, Host, Service, Certificate, AS, IPRange, CPE, Vulnerability) matérialisée dans **Apache AGE** sur le cluster Postgres existant.
+   - Projection graphe du modèle de scan (Domain, Host, Service, Certificate, AS, IPRange, CPE, Vulnerability — modèle tenant unique, pas de label Tenant) matérialisée dans **Apache AGE** sur le cluster Postgres existant.
    - Catalogue de **templates de requête paramétrés** (en lecture seule). Le LLM **ne génère pas de Cypher arbitraire** : il sélectionne un template et lui passe des paramètres. Cela ferme la surface d'injection Cypher et rend l'audit déterministe.
    - Pipeline de retrieval hybride : ancrage vectoriel pour le rappel sémantique, expansion graphe (1–3 sauts) pour le contexte structurel, synthèse LLM avec citations par nœud visité.
    - Rafraîchissement borné : le graphe reflète l'état des données de scan avec une staleness bornée (cible : p95 < 60 s après ingestion).
-   - Audit : chaque exécution de template enregistre le `template_id`, les paramètres, le `tenant_id` du caller, la durée et le nombre de nœuds touchés.
-   - Effacement DSAR : la suppression d'un tenant retire ses nœuds et arêtes dans la même transaction Postgres que la suppression des lignes scalaires (cohérent avec `gdpr-compliance`).
+   - Audit : chaque exécution de template enregistre le `template_id`, les paramètres, le `key_id`/`user_id` du caller, la durée et le nombre de nœuds touchés.
+   - Effacement par identifiant : la suppression d'un `host_id`, domaine ou IP retire les nœuds et arêtes correspondants dans la même transaction Postgres que la suppression des lignes scalaires (cohérent avec `gdpr-compliance`).
 
 2. **Modification de `agent-interface`** :
-   - L'exigence de retrieval devient explicitement **hybride** (vector + graph). Les scénarios existants (top-k vectoriel, citations, isolation tenant, résilience Mistral) restent valides ; on ajoute des scénarios pour les requêtes structurelles et la dégradation gracieuse quand le graphe est indisponible.
+   - L'exigence de retrieval devient explicitement **hybride** (vector + graph). Les scénarios existants (top-k vectoriel, citations, résilience embedder externe) restent valides ; on ajoute des scénarios pour les requêtes structurelles, le contrôle d'accès par RBAC, et la dégradation gracieuse quand le graphe est indisponible.
 
 ## Contraintes
 

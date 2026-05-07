@@ -11,7 +11,7 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Test plan** : `bundle exec rails db:migrate` réussit ; `SELECT * FROM ag_catalog.ag_graph;` renvoie le graphe `reconaut`. Test d'intégration qui crée puis lit un nœud trivial via `cypher('reconaut', $$ CREATE (n:Test {id: 1}) RETURN n $$)`.
 
 - [ ] **1.2 Définir les labels et arêtes**
-  - **Notes** : Labels nœuds : `Tenant`, `Domain`, `Host`, `Service`, `Certificate`, `AutonomousSystem`, `IPRange`, `CPE`, `Vulnerability`. Arêtes : `MONITORS`, `RESOLVES_TO`, `EXPOSES`, `PRESENTS`, `IN_AS`, `IN_RANGE`, `MATCHES_CPE`, `AFFECTED_BY`. Index AGE sur les propriétés `tenant_id`, `host_id`, `cert_sha256`.
+  - **Notes** : Labels nœuds : `Domain`, `Host`, `Service`, `Certificate`, `AutonomousSystem`, `IPRange`, `CPE`, `Vulnerability` (modèle tenant unique : pas de label `Tenant`). Arêtes : `RESOLVES_TO`, `EXPOSES`, `PRESENTS`, `IN_AS`, `IN_RANGE`, `MATCHES_CPE`, `AFFECTED_BY`. Index AGE sur les propriétés `host_id`, `cert_sha256`, `domain`, `cve_id`.
   - **Test plan** : Test qui insère un nœud par label et une arête par type via Cypher ; assure l'existence des index par `EXPLAIN` sur une requête de cluster certificat (le plan utilise l'index `cert_sha256`).
 
 - [ ] **1.3 Rôle Postgres en lecture seule pour les templates**
@@ -43,18 +43,18 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Test plan** : Test qui charge le registry au boot et énumère les templates ; assure que chaque template a un schéma de paramètres et un Cypher non-vide.
 
 - [ ] **3.2 Set noyau de templates (≤ 10) — read-only, depth borné à 3**
-  - **Notes** : Set initial :
-    1. `cert_cluster(cert_sha256, tenant_id)` — hôtes partageant ce cert.
-    2. `host_neighborhood(host_id, depth, tenant_id)` — voisinage via AS/range/cert (1–3 sauts).
-    3. `tenant_assets(tenant_id, kind?)` — actifs paginés (Host/Service/Domain).
-    4. `service_with_vulnerability(cve_id, tenant_id)` — services hébergeant cette CVE.
-    5. `as_hosts(as_number, tenant_id, country?)` — hôtes dans un AS donné.
-    6. `domain_chain(domain, tenant_id)` — chaîne Tenant→Domain→Host pour ce domaine.
-    7. `path_between(from_node_id, to_node_id, max_depth, tenant_id)` — plus court chemin (≤ 3).
-    8. `host_certificates(host_id, tenant_id)` — certificats présentés par un hôte avec leurs partages.
-    9. `cve_exposed_count(cve_id, tenant_id)` — comptage agrégé.
-    10. `tenant_subsidiaries(tenant_id)` — chaîne tenant→filiales→hôtes.
-  - **Test plan** : Pour chaque template, un test fixture-driven qui (a) seed un graphe minimal, (b) appelle le template avec des paramètres valides, (c) assure le résultat attendu, (d) assure une variante avec `tenant_id` différent ne renvoie aucun nœud du tenant absent.
+  - **Notes** : Set initial (modèle tenant unique : aucun paramètre `tenant_id`) :
+    1. `cert_cluster(cert_sha256)` — hôtes partageant ce cert.
+    2. `host_neighborhood(host_id, depth)` — voisinage via AS/range/cert (1–3 sauts).
+    3. `assets_by_kind(kind?)` — actifs paginés (Host/Service/Domain).
+    4. `service_with_vulnerability(cve_id)` — services hébergeant cette CVE.
+    5. `as_hosts(as_number, country?)` — hôtes dans un AS donné.
+    6. `domain_chain(domain)` — chaîne Domain→Host pour ce domaine.
+    7. `path_between(from_node_id, to_node_id, max_depth)` — plus court chemin (≤ 3).
+    8. `host_certificates(host_id)` — certificats présentés par un hôte avec leurs partages.
+    9. `cve_exposed_count(cve_id)` — comptage agrégé.
+    10. `subsidiaries_assets(parent_org_id)` — actifs des filiales déclarées d'une organisation.
+  - **Test plan** : Pour chaque template, un test fixture-driven qui (a) seed un graphe minimal, (b) appelle le template avec des paramètres valides, (c) assure le résultat attendu, (d) assure que les paramètres invalides (out-of-range, ID inexistant) sont rejetés ou retournent un résultat vide propre.
 
 - [ ] **3.3 Linter `templates_lint` (read-only enforcement)**
   - **Notes** : Test CI qui parse chaque Cypher déclaré dans le registry et rejette toute occurrence (insensible à la casse, hors littéraux de chaîne) de `CREATE`, `MERGE`, `SET`, `DELETE`, `DETACH`, `REMOVE`. Échoue avec un message `template-not-readonly` nommant le template.
@@ -73,8 +73,8 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Test plan** : Test fixture-driven qui valide le routing sur 20 requêtes typées (10 sémantiques pures, 10 structurelles, mix). Assure que les requêtes structurelles produisent au moins un `template_id` reconnu.
 
 - [ ] **4.2 Exécution composée vector + graphe**
-  - **Notes** : Si le LLM produit un set de templates, exécuter en parallèle (a) le rappel vectoriel sur `semantic_query` filtré par tenant, (b) chaque template graphe avec ses paramètres. Joindre les résultats sur `host_id`. Synthèse LLM finale avec citations issues des nœuds visités.
-  - **Test plan** : Test e2e avec un graphe fixture (cluster de cert mêlant tenants A et B, services Modbus, AS OVH). Requête « hôtes partageant cert X » du tenant A → seuls les hôtes de A renvoyés. Requête « nginx vulnérables sur OVH » → vector + graphe combinés, citations correctes.
+  - **Notes** : Si le LLM produit un set de templates, exécuter en parallèle (a) le rappel vectoriel sur `semantic_query`, (b) chaque template graphe avec ses paramètres. Joindre les résultats sur `host_id`. Synthèse LLM finale avec citations issues des nœuds visités. Pas de filtrage par tenant : modèle tenant unique, le contrôle d'accès est porté par l'auth + RBAC en amont.
+  - **Test plan** : Test e2e avec un graphe fixture (cluster de cert, services Modbus, AS OVH). Requête « hôtes partageant cert X » → cluster complet renvoyé. Requête « nginx vulnérables sur OVH » → vector + graphe combinés, citations correctes. Test négatif : un utilisateur `viewer` qui appelle `/agent/chat` reçoit 403 avant tout calcul (cf. spec `platform`).
 
 - [ ] **4.3 Métriques `retrieval_path` et latence par chemin**
   - **Notes** : Compteurs Prometheus `retrieval_path_total{path="vector|graph|hybrid"}` ; histogramme `retrieval_latency_seconds{path=...}`.
@@ -93,7 +93,7 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 ## 5. Audit des requêtes graphe — spec : `graph-retrieval` + `gdpr-compliance`
 
 - [ ] **5.1 Persistance des entrées d'audit graphe**
-  - **Notes** : Réutiliser la table `audit_log` existante avec des colonnes `template_id`, `params_normalized` (JSON sans valeurs sensibles), `tenant_id`, `key_id`/`user_id`, `duration_ms`, `nodes_touched`, `status`. Écriture en moins de 1 s après l'exécution.
+  - **Notes** : Réutiliser la table `audit_log` existante avec des colonnes `template_id`, `params_normalized` (JSON sans valeurs sensibles), `key_id`/`user_id` du caller, `duration_ms`, `nodes_touched`, `status`. Écriture en moins de 1 s après l'exécution.
   - **Test plan** : Test e2e qui exécute chaque template du set noyau et assure qu'une ligne d'audit existe pour chaque, avec les champs renseignés et un `status` cohérent (`success` / `timeout` / `unauthorized`).
 
 - [ ] **5.2 Audit des chemins d'erreur**
@@ -104,13 +104,13 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 6. Effacement DSAR du graphe — spec : `graph-retrieval` + `gdpr-compliance`
 
-- [ ] **6.1 Inclure les nœuds/arêtes graphe dans la transaction DSAR**
-  - **Notes** : Étendre le service d'effacement existant pour exécuter la suppression Cypher (`MATCH (n {tenant_id: $tid}) DETACH DELETE n` via le rôle writer) dans la même transaction que la suppression des lignes scalaires. Atomique : commit ou rollback global.
-  - **Test plan** : Test e2e avec horloge simulée — soumettre l'effacement d'un tenant doté de 50 hôtes, 200 services et 30 certificats projetés ; assurer que (a) à commit, plus aucun nœud n'a `tenant_id="A"` dans toutes les régions EU actives, (b) à rollback simulé, ni les lignes scalaires ni les nœuds ne sont supprimés.
+- [ ] **6.1 Inclure les nœuds/arêtes graphe dans la transaction d'effacement**
+  - **Notes** : Étendre le service d'effacement par identifiant (cf. spec `gdpr-compliance`) pour exécuter la suppression Cypher des nœuds et arêtes liés à l'identifiant cible (`MATCH (n)-[r]-() WHERE n.host_id = $hid OR n.domain = $domain ... DETACH DELETE n` via le rôle writer) dans la même transaction Postgres que la suppression des lignes scalaires. Atomique : commit ou rollback global.
+  - **Test plan** : Test e2e — soumettre l'effacement de `host_id=H1` doté de nœuds graphe (Service, Certificate, etc. liés) ; assurer que (a) à commit, plus aucun nœud lié à `H1` n'existe en AGE, (b) à rollback simulé (panic injecté), ni les lignes scalaires ni les nœuds ne sont supprimés.
 
-- [ ] **6.2 Vérification post-effacement multi-région**
-  - **Notes** : Étape de vérification déjà présente dans le workflow DSAR ; étendre pour interroger AGE dans chaque région et confirmer l'absence de nœuds rattachés au tenant supprimé.
-  - **Test plan** : Le test multi-région du workflow DSAR couvre désormais l'absence de nœuds graphe en plus des lignes scalaires et des objets froids.
+- [ ] **6.2 Vérification post-effacement**
+  - **Notes** : Étape de vérification du workflow d'effacement étendue pour interroger AGE et confirmer l'absence de nœuds rattachés à l'identifiant effacé.
+  - **Test plan** : Le test du workflow d'effacement couvre désormais l'absence de nœuds graphe en plus des lignes scalaires et des artefacts en tier froid.
 
 ---
 
@@ -133,7 +133,7 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Test plan** : La page existe et est référencée depuis le README racine.
 
 - [ ] **8.2 Notes sur les limites connues d'AGE**
-  - **Notes** : Documenter les patterns à éviter (traversées non bornées, agrégats sur tout le graphe, requêtes sans clause tenant) et la politique de fallback.
+  - **Notes** : Documenter les patterns à éviter (traversées non bornées, agrégats sur tout le graphe, Cypher mutant glissé dans un template par mégarde) et la politique de fallback vers le retrieval vectoriel pur.
 
 ---
 

@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Semantic Search over Indexed Assets
-L'agent DOIT répondre aux requêtes en langage naturel via un **pipeline de retrieval hybride** combinant rappel vectoriel `mistral-embed` (1024-dim, cohérent avec la spec existante) et expansion graphe via les templates paramétrés définis dans la capacité `graph-retrieval`. Le rappel vectoriel reste l'ancrage par défaut pour les requêtes sémantiques sur texte libre (bannières, extraits HTML, fingerprints). L'expansion graphe (1–3 sauts, lecture seule) ajoute le contexte structurel (clusters de certificats, voisinage AS, chaînes tenant→domaine→hôte, jointures CPE→Vulnerability). Les appels à l'API Mistral DOIVENT cibler le endpoint EU et être encadrés par un DPA Art. 28 (voir spec `gdpr-compliance`). Chaque résultat DOIT citer son enregistrement de scan source pour que l'utilisateur vérifie la provenance.
+L'agent DOIT répondre aux requêtes en langage naturel via un **pipeline de retrieval hybride** combinant rappel vectoriel (via l'interface `Embedder` configurable par env, cf. exigences `Local Embedder by Default`) et expansion graphe via les templates paramétrés définis dans la capacité `graph-retrieval`. Le rappel vectoriel reste l'ancrage par défaut pour les requêtes sémantiques sur texte libre (bannières, extraits HTML, fingerprints). L'expansion graphe (1–3 sauts, lecture seule) ajoute le contexte structurel (clusters de certificats, voisinage AS, chaînes domaine→hôte, jointures CPE→Vulnerability). Chaque résultat DOIT citer son enregistrement de scan source pour que l'utilisateur vérifie la provenance.
 
 #### Scenario: Utilisateur cherche les Modbus exposés en France
 - **GIVEN** l'index contient des hôtes avec country=`FR` exposant un service tagué `modbus`
@@ -31,20 +31,19 @@ L'agent DOIT répondre aux requêtes en langage naturel via un **pipeline de ret
 - **WHEN** une requête donne zéro correspondance au-dessus du seuil de similarité ET zéro nœud graphe pertinent
 - **THEN** l'agent renvoie un tableau `results` vide et un message textuel indiquant qu'aucun hôte n'a matché, plutôt que de fabriquer des résultats
 
-### Requirement: Tenant-Scoped Conversation Context
-L'agent DEVRA récupérer uniquement les données que l'utilisateur requérant est autorisé à voir. La fuite cross-tenant DOIT être empêchée par construction sur les **deux chemins** du pipeline hybride : le filtre tenant DOIT être appliqué (a) au niveau de la requête vers le vector store, et (b) au niveau de la clause Cypher de chaque template graphe — jamais comme filtre post-récupération.
+### Requirement: RBAC-Scoped Conversation Context
+L'agent DEVRA appliquer le contrôle d'accès par authentification et RBAC en amont du pipeline de retrieval. Reconaut étant tenant unique, aucun filtre `tenant_id` n'est appliqué dans les requêtes vectorielles ni dans les templates Cypher. L'autorisation d'appeler `/agent/chat` est gardée par le rôle minimum (`analyst` ou supérieur) ; un `viewer` est rejeté en 403 avant tout calcul.
 
-#### Scenario: Utilisateur du tenant A interroge l'agent
-- **GIVEN** les tenants A et B ont chacun des hôtes privés tagués sur mesure dans l'index ET dans le graphe
-- **WHEN** un utilisateur authentifié comme tenant A soumet une requête quelconque
-- **THEN** la requête est rejetée avec HTTP 403 avant tout calcul (auth + RBAC) ou exécutée sans filtre tenant si l'utilisateur a le rôle requis (modèle tenant unique)
-- **AND** aucun paramètre `tenant_id` n'est lu ni produit par le pipeline
-- **AND** un test d'intégration exécute ≥ 100 requêtes randomisées du tenant A (mix sémantique et structurel) et assure qu'aucun résultat ne référence un hôte privé du tenant B
+#### Scenario: Viewer rejeté avant tout calcul
+- **GIVEN** un utilisateur authentifié avec le rôle `viewer`
+- **WHEN** l'utilisateur appelle `POST /agent/chat`
+- **THEN** Rails rejette la requête avec HTTP 403 avant tout appel embedder ou Cypher
+- **AND** aucun appel sortant ni Cypher n'est observé pendant le test
 
-#### Scenario: Jeu de données public reste interrogeable
-- **GIVEN** des enregistrements de scan ingérés sous le scope tenant `public` (présents à la fois en index vectoriel et en graphe)
-- **WHEN** un utilisateur du tenant A interroge
-- **THEN** les enregistrements `public` correspondants sont renvoyés aux côtés des enregistrements privés du tenant A, classés par similarité ou par pertinence graphe selon le chemin
+#### Scenario: Aucun paramètre tenant dans le pipeline
+- **GIVEN** une revue automatisée du code du pipeline hybride
+- **WHEN** un linter scanne les SQL/Cypher générés et les payloads d'embedder
+- **THEN** aucun filtre `tenant_id` n'est présent ; aucun paramètre `tenant`, `caller_tenant` ou équivalent n'est lu ou injecté
 
 ## ADDED Requirements
 

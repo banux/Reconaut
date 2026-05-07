@@ -7,11 +7,11 @@ Statut : note de cadrage, pas un change OpenSpec. Sert à décider du périmètr
 L'agent conversationnel actuellement spécifié dans `agent-interface` repose sur un RAG vectoriel classique : embed `mistral-embed` (1024-dim) → index pgvector → top-k=5 → réponse LLM avec citations `(host_id, scanned_at)`. Ce design répond bien aux requêtes sémantiques sur du texte libre (bannières HTTP, extraits HTML, fingerprint de logiciel) mais **rate les requêtes structurelles** qui font la valeur d'un Shodan-like :
 
 - « Quels hôtes partagent ce certificat TLS feuille ? » (cluster de réutilisation de cert)
-- « Modbus exposés appartenant aux filiales du tenant X » (parcours tenant → entités liées → hôtes → services)
+- « Modbus exposés sur les domaines du périmètre déclaré » (parcours Domain → Host → Service)
 - « Voisinage réseau d'un hôte compromis » (AS + range IP + cert cluster, multi-saut)
 - « Hôtes hébergeant une CVE critique sur un service public » (jointure CPE → CVE)
 
-Ces requêtes sont par nature **graphes** : nœuds (Host, Service, Certificate, AS, Tenant, Vulnerability, Domain) et arêtes (héberge, présente, appartient, partage, est-vulnérable). Le RAG vectoriel n'a pas de notion de chemin et retourne du texte plat.
+Ces requêtes sont par nature **graphes** : nœuds (Host, Service, Certificate, AS, Vulnerability, Domain — modèle tenant unique, pas de nœud Tenant) et arêtes (héberge, présente, partage, est-vulnérable). Le RAG vectoriel n'a pas de notion de chemin et retourne du texte plat.
 
 Graph RAG est une famille de techniques qui combine retrieval sur graphe (parcours, voisinage, sous-graphe) et génération LLM. La question de cette note : **est-ce pertinent pour Reconaut, et sous quelle forme ?**
 
@@ -34,7 +34,7 @@ Le graphe est déjà là, dérivé du modèle de données métier. Le RAG = trad
 - **Neo4j GraphRAG** (officiel, depuis 2024) — pipeline hybride pgvector + Cypher, support natif des citations par nœud.
 - **LangChain GraphCypherQAChain** — LLM génère du Cypher à partir du langage naturel ; exécute contre Neo4j/Memgraph.
 - **Apache AGE** (extension Postgres) — donne Cypher *sur Postgres*. Mature mais moins riche que Neo4j côté algos de graphe.
-- **Kuzu** (embedded) — très rapide, pas de multi-tenant natif.
+- **Kuzu** (embedded) — très rapide, modèle embedded mono-process.
 
 **Pertinence pour Reconaut : forte.** C'est l'angle à creuser.
 
@@ -43,31 +43,33 @@ Le graphe est déjà là, dérivé du modèle de données métier. Le RAG = trad
 Le modèle implicite issu des spec deltas existants est déjà un graphe :
 
 ```
-Tenant ──(monitore)──► Domain ──(résout)──► Host ──(présente)──► Service ──(implémente)──► CPE ──(matche)──► Vulnerability
-                                              │
-                                              ├──(sert)──► Certificate ──(partagé avec)──► Host (autre)
-                                              │
-                                              ├──(appartient à AS)──► AutonomousSystem ──(opéré par)──► Organization
-                                              │
-                                              └──(dans range)──► IPRange
+Domain ──(résout)──► Host ──(présente)──► Service ──(implémente)──► CPE ──(matche)──► Vulnerability
+                       │
+                       ├──(sert)──► Certificate ──(partagé avec)──► Host (autre)
+                       │
+                       ├──(IN_AS)──► AutonomousSystem
+                       │
+                       └──(IN_RANGE)──► IPRange
 ```
+
+(Modèle tenant unique : pas de nœud `Tenant`. Le périmètre des actifs est porté par la liste de scope déclarée par l'opérateur, pas par une notion de tenant dans le graphe.)
 
 Arêtes intéressantes pour les requêtes :
 - `Certificate ↔ Host` (cardinalité 1:N, où le N est exactement le cluster d'usage du cert) — typiquement les requêtes de surface d'attaque.
-- `AS ↔ Host` (1:N grand, mais filtrable par tenant ou pays).
-- `Tenant ↔ Domain ↔ Host` (chaîne de propriété, structurante pour l'isolation).
+- `AS ↔ Host` (1:N grand, filtrable par pays).
+- `Domain ↔ Host` (chaîne de découverte depuis le scope déclaré).
 - `Service ↔ CPE ↔ Vulnerability` (requêtes de risque).
 
 ## 4. Options techniques pour le stockage graphe
 
-| Option | Pour | Contre | Résidence EU | Compatible RLS multi-tenant |
+| Option | Pour | Contre | Self-hostable | Cohérent avec stack Reconaut |
 |---|---|---|---|---|
-| **Apache AGE (extension Postgres)** | Reste dans Postgres existant ; RLS héritée ; même réplication multi-actif EU ; pas de nouveau fournisseur ; transactions globales avec les tables OLTP | Maturité moindre que Neo4j ; performance dégradée sur traversées profondes (>5 sauts) ; communauté plus petite | ✅ même cluster Postgres EU | ✅ RLS s'applique aux lignes graphe (qui sont des lignes Postgres) |
-| **Neo4j Aura EU** | Outillage le plus riche, bibliothèque GraphRAG officielle, algos de graphe matures | Nouveau sous-traitant Art. 28 (DPA, résidence EU à contractualiser) ; périmètre d'auth/audit séparé du backend Rails ; réplication multi-actif EU à concevoir séparément | ⚠️ Aura EU existe mais à valider | ❌ pas de RLS — isolation à reconstruire applicativement |
-| **Memgraph EU auto-hébergé** | Open-source, compatible Cypher, EU-hostable | Charge opérationnelle d'auto-héberger une seconde DB ; isolation tenant à concevoir | ✅ si auto-hébergé | ❌ pas de RLS native |
-| **Kuzu (embedded)** | Très rapide, pas de réseau | Embedded = un par instance, pas de partage multi-actif EU naturel ; pas de multi-tenant | N/A | ❌ |
-| **Pure SQL/JOINs sur Postgres (pas de Cypher)** | Zéro nouveau composant ; LLM génère du SQL ; RLS native | Requêtes de chemin profondes très verbeuses ; pas de WITH RECURSIVE pratique pour `find_path` arbitraire | ✅ | ✅ |
-| **Vue dérivée graphe-en-mémoire** (NetworkX/petgraph chargé à la volée) | Simple ; algos riches en lib | Ne scale pas au-delà de quelques millions d'arêtes ; rechargement coûteux | ✅ | ✅ via filtre tenant au chargement |
+| **Apache AGE (extension Postgres)** | Reste dans Postgres existant ; pas de nouveau fournisseur ni service ; transactions globales avec les tables OLTP | Maturité moindre que Neo4j ; performance dégradée sur traversées profondes (>5 sauts) ; communauté plus petite | ✅ même cluster Postgres | ✅ aligné sur la stack figée (Postgres unique TimescaleDB+pgvector+AGE) |
+| **Neo4j Community auto-hébergé** | Outillage le plus riche, bibliothèque GraphRAG officielle, algos de graphe matures | Nouvelle DB à opérer ; périmètre d'auth/audit séparé du backend Rails ; effacement DSAR distribué à concevoir | ✅ Community Edition | ❌ casse la promesse « Postgres unique » |
+| **Memgraph auto-hébergé** | Compatible Cypher, performant, source-available | Charge opérationnelle d'auto-héberger une seconde DB ; conformité licence à vérifier | ✅ si auto-hébergé | ❌ deuxième DB à exploiter |
+| **Kuzu (embedded)** | Très rapide, pas de réseau, embedded | Embedded mono-process — couplé au binaire qui le charge ; pas adapté à un Rails monolithe + workers Go séparés | N/A | ❌ |
+| **Pure SQL/JOINs sur Postgres (pas de Cypher)** | Zéro nouveau composant ; LLM génère du SQL ; tout en ActiveRecord | Requêtes de chemin profondes très verbeuses ; pas de WITH RECURSIVE pratique pour `find_path` arbitraire | ✅ | ✅ mais perd la valeur graphe |
+| **Vue dérivée graphe-en-mémoire** (NetworkX/networkx-go chargé à la volée) | Simple ; algos riches en lib | Ne scale pas au-delà de quelques millions d'arêtes ; rechargement coûteux | ✅ | ⚠️ acceptable pour un prototype |
 
 ## 5. Architecture pressentie pour Reconaut
 
@@ -85,7 +87,7 @@ Arêtes intéressantes pour les requêtes :
 
 ## 6. Implications cross-cutting
 
-- **GDPR / effacement** : la cohérence DSAR exige que la suppression d'un tenant retire les nœuds *et* les arêtes du graphe. Avec AGE = même transaction Postgres que la suppression des lignes scalaires → cohérence triviale. Avec Neo4j séparé = workflow de suppression distribué à concevoir + tester (`gdpr-compliance` deviendrait plus complexe).
+- **GDPR / effacement par identifiant** : la cohérence du workflow d'effacement par identifiant (cf. `gdpr-compliance`) exige que la suppression d'un `host_id` retire les nœuds *et* les arêtes du graphe. Avec AGE = même transaction Postgres que la suppression des lignes scalaires → cohérence triviale. Avec Neo4j séparé = workflow de suppression distribué à concevoir + tester.
 - **Audit** : les requêtes Cypher générées par LLM doivent être journalisées (texte de la requête, durée, nombre de nœuds touchés). Risque d'injection Cypher = LLM peut générer des requêtes destructives (`DETACH DELETE`). Mitigation : runtime read-only pour les requêtes d'agent, allowlist de patterns Cypher, ou DSL restreint plutôt que Cypher brut.
 - **Stack** : AGE = extension Postgres → s'installe via `CREATE EXTENSION age`, pas de service supplémentaire à déployer. Cohérent avec le change `add-tech-stack` (Rails 8 monolithe + workers Go + GoodJob). Côté Rails, gem `activerecord-age` ou requêtes brutes via `ActiveRecord::Base.connection.execute`.
 - **Coût** : zéro coût marginal Mistral pour la construction du graphe (vs MS GraphRAG qui coûte des centaines de dollars en tokens pour un corpus moyen). Coût LLM uniquement à la requête, comme aujourd'hui.
@@ -107,7 +109,7 @@ Arêtes intéressantes pour les requêtes :
 2. **Templates de requête vs Cypher généré**. Combien de templates couvrent 80 % des intentions utilisateur ? (à mesurer empiriquement sur des logs d'agent une fois la v1 livrée).
 3. **Rafraîchissement du graphe** : trigger à l'ingestion de chaque scan, ou job batch toutes les N minutes ? Trade-off fraîcheur vs charge.
 4. **Métriques de qualité graph RAG** : comment mesurer qu'on bat le RAG vectoriel pur ? Set d'évaluation à constituer (10–20 requêtes structurelles golden).
-5. **Mémoire graphe par tenant** : taille typique en nœuds/arêtes pour un tenant moyen ? Conditionne le choix entre AGE persistant et un graphe en mémoire chargé à la session.
+5. **Taille typique du graphe par instance** : nombre de nœuds/arêtes pour un opérateur moyen (échelle PME → grand groupe) ? Conditionne le choix entre AGE persistant et un graphe en mémoire chargé à la session.
 
 ## 9. Sources et frameworks à étudier plus en profondeur (avant le change)
 

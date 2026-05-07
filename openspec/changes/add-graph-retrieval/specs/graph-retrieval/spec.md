@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Asset Graph Projection
-La plateforme DOIT matérialiser un graphe d'actifs dérivé déterministiquement des données de scan structurées, dans Apache AGE sur le cluster Postgres existant. Les labels de nœuds DOIVENT inclure au minimum : `Tenant`, `Domain`, `Host`, `Service`, `Certificate`, `AutonomousSystem`, `IPRange`, `CPE`, `Vulnerability`. Les arêtes DOIVENT couvrir au minimum : `MONITORS` (Tenant→Domain), `RESOLVES_TO` (Domain→Host), `EXPOSES` (Host→Service), `PRESENTS` (Host→Certificate), `IN_AS` (Host→AutonomousSystem), `IN_RANGE` (Host→IPRange), `MATCHES_CPE` (Service→CPE), `AFFECTED_BY` (CPE→Vulnerability). Aucune extraction LLM NE DOIT être utilisée pour construire le graphe.
+La plateforme DOIT matérialiser un graphe d'actifs dérivé déterministiquement des données de scan structurées, dans Apache AGE sur le cluster Postgres existant. Les labels de nœuds DOIVENT inclure au minimum : `Domain`, `Host`, `Service`, `Certificate`, `AutonomousSystem`, `IPRange`, `CPE`, `Vulnerability` (modèle tenant unique : aucun label `Tenant`). Les arêtes DOIVENT couvrir au minimum : `RESOLVES_TO` (Domain→Host), `EXPOSES` (Host→Service), `PRESENTS` (Host→Certificate), `IN_AS` (Host→AutonomousSystem), `IN_RANGE` (Host→IPRange), `MATCHES_CPE` (Service→CPE), `AFFECTED_BY` (CPE→Vulnerability). Aucune extraction LLM NE DOIT être utilisée pour construire le graphe.
 
 #### Scenario: Ingestion d'un scan projette les nœuds et arêtes
 - **GIVEN** un résultat de scan ingéré contenant un nouvel hôte `H1` avec un service Modbus `S1` et un certificat `C1` partagé avec un hôte existant `H2`
@@ -102,7 +102,7 @@ Si AGE est indisponible (extension absente, requête en timeout, RLS rejette par
 Chaque exécution de template DOIT produire une entrée d'audit append-only contenant `template_id`, paramètres normalisés, `key_id` ou `user_id` du caller, durée d'exécution en ms, nombre de nœuds touchés, et statut (`success` / `timeout` / `unauthorized` / `unknown_template`). Le journal réutilise le même schéma de table que le journal d'audit défini dans `gdpr-compliance`.
 
 #### Scenario: Trace d'audit pour exécution réussie
-- **GIVEN** un utilisateur du tenant A déclenche le template `cert_cluster`
+- **GIVEN** un utilisateur authentifié avec le rôle `analyst` déclenche le template `cert_cluster`
 - **WHEN** l'exécution termine avec succès en 80 ms en touchant 12 nœuds
 - **THEN** une ligne d'audit est écrite en moins de 1 s contenant `template_id="cert_cluster"`, `user_id` du caller, `duration_ms=80`, `nodes_touched=12`, `status="success"`
 - **AND** un test d'intégration vérifie la présence de la ligne via `SELECT` sur la table d'audit
@@ -112,13 +112,13 @@ Chaque exécution de template DOIT produire une entrée d'audit append-only cont
 - **THEN** une ligne d'audit avec `status="unknown_template"` est écrite et la requête est rejetée
 
 ### Requirement: Erasure Coherence
-La suppression DSAR d'un tenant DOIT retirer ses nœuds et arêtes de la projection graphe **dans la même transaction Postgres** que la suppression des lignes scalaires correspondantes. Aucun nœud ne DOIT survivre à la suppression de son tenant. Cette exigence est cohérente avec le workflow DSAR multi-région défini dans `gdpr-compliance`.
+Le workflow d'effacement par identifiant (cf. `gdpr-compliance` : IP, domaine, `host_id`) DOIT retirer les nœuds et arêtes correspondants de la projection graphe **dans la même transaction Postgres** que la suppression des lignes scalaires. Aucun nœud lié à l'identifiant effacé ne DOIT survivre à la suppression.
 
-#### Scenario: Effacement d'un tenant retire les nœuds graphe
-- **GIVEN** le tenant A possède 50 hôtes, 200 services et 30 certificats projetés en nœuds graphe
-- **WHEN** un effacement DSAR pour le tenant A est exécuté
-- **THEN** dans la même transaction, les lignes scalaires et les nœuds/arêtes AGE correspondants sont supprimés ; la transaction est atomique (commit ou rollback global)
-- **AND** une vérification post-suppression dans **chaque région EU active** ne renvoie aucun nœud rattaché au tenant A
+#### Scenario: Effacement d'un host_id retire les nœuds graphe
+- **GIVEN** un hôte `H1` possède des nœuds graphe associés (services exposés, certificats présentés, arêtes `IN_AS`/`IN_RANGE`)
+- **WHEN** l'opérateur déclenche l'effacement par identifiant `host_id=H1`
+- **THEN** dans la même transaction, les lignes scalaires et les nœuds/arêtes AGE liés à `H1` sont supprimés ; la transaction est atomique (commit ou rollback global)
+- **AND** une vérification post-suppression ne renvoie aucun nœud `Host` ni arête sortante de `H1` dans le graphe
 - **AND** une tombstone hashée est écrite dans le journal d'audit (cohérent avec `gdpr-compliance`)
 
 ### Requirement: EU Residency of the Graph Tier
