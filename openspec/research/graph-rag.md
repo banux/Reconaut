@@ -38,6 +38,28 @@ Le graphe est déjà là, dérivé du modèle de données métier. Le RAG = trad
 
 **Pertinence pour Reconaut : forte.** C'est l'angle à creuser.
 
+### 2.3 Cas particulier : Graphiti (Zep, 2024)
+**Graphiti** ([github.com/getzep/graphiti](https://github.com/getzep/graphiti), Apache 2.0, Python) mérite un traitement séparé : il a beaucoup de visibilité dans l'écosystème agent et est régulièrement cité comme « le » framework Graph RAG moderne.
+
+**Ce que c'est** : un framework de construction de **graphe de connaissance temporel pour mémoire d'agent**. Idée centrale : les agents ingèrent des « épisodes » (texte brut, JSON structuré, message de chat), un LLM en extrait entités + relations, et le graphe enregistre des **validités bi-temporelles** (quand un fait est devenu vrai, quand il a été invalidé). Le graphe évolue en continu, fait par fait, sans recalcul global. Schéma personnalisable via Pydantic.
+
+**Backends supportés** : Neo4j (par défaut/recommandé), FalkorDB, Kuzu, Amazon Neptune.
+
+**LLM/embedders** : OpenAI (défaut), Anthropic, Gemini, Azure OpenAI, Groq, Ollama, Voyage. Self-hostable de bout en bout via Ollama + Neo4j Desktop / FalkorDB.
+
+**Serveur MCP** : un MCP server officiel Graphiti existe.
+
+**Famille** : Graphiti est conceptuellement un **2.1 amélioré** — il *requiert* un appel LLM à l'index pour extraire entités/relations depuis chaque épisode. Différence vs MS GraphRAG : extraction incrémentale (par épisode) plutôt que batch global, et bi-temporalité native plutôt que résumés de communauté.
+
+**Pertinence pour Reconaut** :
+- **Adoption directe : non.** Notre dataset est déjà structuré (Host, Service, Cert sont des lignes typées sortant des workers Go) ; faire passer chaque scan au LLM pour extraire ce qu'on a déjà serait absurde et contraire à la promesse « auto-hébergement sans condition » (forcerait un LLM même pour ingérer un scan).
+- **Backends incompatibles avec notre stack** : aucun support Postgres/AGE. Neo4j → casse « Postgres unique » et amène la pression Enterprise. FalkorDB → **licence SSPL (non-OSI)** incompatible avec l'identité AGPL-3.0 du projet. Kuzu → embedded mono-process, inadapté à Rails monolithe + workers Go séparés. Neptune → AWS-only propriétaire.
+- **Idées à reprendre conceptuellement** :
+  - **Bi-temporalité** (`valid_from` / `valid_until` par fait/relation). Reconaut a déjà partiellement ça via TimescaleDB (`scanned_at`), mais formaliser que chaque arête « Host héberge Service » porte une fenêtre de validité issue des scans est une bonne idée — utile pour répondre à « ce service était-il exposé le jour X ? » sans rejouer le scan.
+  - **Provenance explicite par épisode** : chaque arête trace son origine (ici : `scan_id`/`scan_run_id`). Aligné avec le modèle d'audit déjà spécifié.
+  - **Schéma de nœuds/arêtes typé via classes** (Pydantic chez eux ; côté Rails on aurait des `ActiveRecord::Base` ou des dataclasses Sorbet/RBS) — utile pour valider la projection scan → graphe.
+- **Verdict** : ne pas embarquer Graphiti comme dépendance ; lire son code pour le pattern bi-temporel et la structure de provenance, et décider au change `add-graph-retrieval` si on veut formaliser les fenêtres de validité dès la v1 ou les différer.
+
 ## 3. Mapping sur le dataset Reconaut
 
 Le modèle implicite issu des spec deltas existants est déjà un graphe :
@@ -124,6 +146,7 @@ Reconaut est distribué sous **AGPL-3.0-only**. Toute dépendance graphe doit ê
 - Apache AGE (Apache 2.0) — vérifier la compatibilité avec TimescaleDB sur le même cluster, performance de Cypher sur des graphes 10–100 M arêtes, support de la réplication logique multi-actif.
 - LangChain GraphCypherQAChain (MIT) — patron de génération guidée vs templates.
 - Article original « From Local to Global: A GraphRAG Approach » (Microsoft, 2024) — pour la terminologie partagée.
+- Graphiti (Zep, Apache 2.0) — pour le pattern bi-temporel (validité d'un fait dans le temps) et la structure de provenance par épisode. À lire pour les idées, pas à embarquer (cf. § 2.3).
 - Revue licence des dépendances ajoutées par le change — toute nouvelle gem Ruby / module Go embarqué avec le produit doit être OSI-approved et compatible AGPL-3.0 (proscrire BSL, SSPL, Elastic License v2, Commons Clause).
 
 ---
