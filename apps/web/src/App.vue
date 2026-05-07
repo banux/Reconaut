@@ -1,12 +1,7 @@
 <script setup>
-// Squelette - sera remplace par les vues reelles aux iterations
-// agent-interface / scanning. Iteration courante : juste un ancrage
-// pour valider le tooling Vite + Vitest.
-const buildLabel = "Reconaut bootstrap";
+import HomeView from "./views/HomeView.vue";
 </script>
 
 <template>
-  <main>
-    <h1>{{ buildLabel }}</h1>
-  </main>
+  <HomeView />
 </template>
