@@ -11,13 +11,15 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Test plan** : `bundle exec rails db:migrate` réussit ; `SELECT * FROM ag_catalog.ag_graph;` renvoie le graphe `reconaut`. Test d'intégration qui crée puis lit un nœud trivial via `cypher('reconaut', $$ CREATE (n:Test {id: 1}) RETURN n $$)`.
   - **Statut** : migration `apps/api/db/migrate/20260507000001_enable_graph_extensions.rb` écrite (active TimescaleDB + pgvector + AGE, crée le graphe `reconaut` de manière idempotente, est réversible). Tests statiques en place (6 specs vérifient le contenu et la nomenclature). **Reste** : test d'intégration `db:migrate` end-to-end contre une instance Postgres avec AGE installé — gaté sur démarrage de docker-compose en CI ; à activer dans une itération suivante via `DATABASE_INTEGRATION_TESTS=1`.
 
-- [ ] **1.2 Définir les labels et arêtes**
+- [x] **1.2 Définir les labels et arêtes**
   - **Notes** : Labels nœuds : `Domain`, `Host`, `Service`, `Certificate`, `AutonomousSystem`, `IPRange`, `CPE`, `Vulnerability` (modèle tenant unique : pas de label `Tenant`). Arêtes : `RESOLVES_TO`, `EXPOSES`, `PRESENTS`, `IN_AS`, `IN_RANGE`, `MATCHES_CPE`, `AFFECTED_BY`. Index AGE sur les propriétés `host_id`, `cert_sha256`, `domain`, `cve_id`.
   - **Test plan** : Test qui insère un nœud par label et une arête par type via Cypher ; assure l'existence des index par `EXPLAIN` sur une requête de cluster certificat (le plan utilise l'index `cert_sha256`).
+  - **Statut** : migration `apps/api/db/migrate/20260507000002_create_graph_labels_and_indexes.rb` écrite (8 labels noeuds + label `Organization` pour `subsidiaries_assets`, 7 aretes + `OWNS`/`PARENT_OF`, idempotente via `IF NOT EXISTS`, index btree sur `id` pour chaque label + secondaires sur `Certificate.sha256`, `Vulnerability.cve_id`, `Domain.name`, `AutonomousSystem.number`). 6 specs statiques. Le test EXPLAIN reel reste gaté sur DB live.
 
-- [ ] **1.3 Rôle Postgres en lecture seule pour les templates**
+- [x] **1.3 Rôle Postgres en lecture seule pour les templates**
   - **Notes** : Créer le rôle `reconaut_graph_reader` avec `SELECT` uniquement sur les tables de labels et d'arêtes AGE. Aucun `INSERT`/`UPDATE`/`DELETE`. La connexion exécutant les templates utilise ce rôle ; l'ingestion utilise un rôle distinct `reconaut_graph_writer`.
   - **Test plan** : Test d'intégration tente une mutation (`CREATE (n:Host {...})`) avec le rôle reader → reçoit `permission denied` ; la même mutation avec le rôle writer réussit.
+  - **Statut** : migration `apps/api/db/migrate/20260507000003_create_graph_roles.rb` (créée idempotemment, NOSUPERUSER/NOCREATEDB/NOCREATEROLE pour les deux). Privilèges : reader = SELECT seul (sur `ag_catalog` et schéma `reconaut`), writer = SELECT + INSERT + UPDATE + DELETE + droit d'exécuter `create_vlabel`/`create_elabel`. `REVOKE EXECUTE ... FROM PUBLIC` sur `create_vlabel`, `create_elabel`, `drop_graph` pour barrer le reader. `ALTER DEFAULT PRIVILEGES` pour les futures tables AGE. 6 specs statiques. Test d'intégration `permission denied` end-to-end gaté sur DB live.
 
 ---
 

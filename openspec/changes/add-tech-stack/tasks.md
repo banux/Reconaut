@@ -9,9 +9,10 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 - [x] **1.1 `openspec/project.md` figé sur la stack** (déjà fait dans ce change)
   - **Notes** : Section *Stack* mise à jour : Vue 3 + Vite, Rails 8, Go (workers), GoodJob (file Postgres-backed), embedder pluggable via env, Postgres unique avec TimescaleDB + pgvector + AGE, pas de stockage objet, auth local-first.
 
-- [ ] **1.2 Aligner les notes d'implémentation de `init-reconaut-platform/tasks.md`**
+- [x] **1.2 Aligner les notes d'implémentation de `init-reconaut-platform/tasks.md`**
   - **Notes** : Réécrire les *Notes* et *Test plan* pour refléter Rails 8 (RSpec, Sorbet/`rbs` si retenu, ActiveRecord, gem `circuit_box` ou équivalent, gem DNS) et Go (`go test`, `golangci-lint`, `go test -bench`, sondeurs en Go pur). Ne pas toucher aux spec deltas (qui sont implementation-agnostiques).
   - **Test plan** : `grep -RniE "fastapi|aiohttp|sqlmodel|uv run|pyproject|cargo|clippy|criterion|rust" openspec/changes/init-reconaut-platform/tasks.md` ne renvoie aucune occurrence ; chaque ancienne mention Python ou Rust a un remplacement Rails ou Go avec sa contrepartie d'outillage de test.
+  - **Statut** : grep négatif vérifié — `init-reconaut-platform/tasks.md` ne contient déjà aucune occurrence de FastAPI / aiohttp / sqlmodel / uv / pyproject / cargo / clippy / criterion / rust / python. Les notes d'implémentation ont été réécrites en amont du change actuel (cf. commit `f667aef` qui a folded pivot-to-open-source dans init-reconaut-platform). Aucune réécriture supplémentaire requise.
 
 ---
 
@@ -83,13 +84,15 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 
 ## 6. Documentation et runbooks
 
-- [ ] **6.1 Documentation de la frontière Rails ↔ Go**
+- [x] **6.1 Documentation de la frontière Rails ↔ Go**
   - **Notes** : Page de doc interne décrivant le contrat de message, la liste des schémas versionnés, comment ajouter un nouveau type de scan (créer le schéma, le publier dans `packages/job-schema`, implémenter le handler Go, ne JAMAIS le coder côté Rails).
   - **Test plan** : La page existe sous `docs/architecture/scan-frontier.md` et est référencée depuis le README racine.
+  - **Statut** : `docs/architecture/scan-frontier.md` livrée et référencée depuis le README. Couvre principes intangibles (pas d'appel synchrone Rails→Go, pas de logique de scan dans Rails, schemas versionnés, idempotence, at-least-once), les 3 schémas en vigueur, la procédure d'ajout d'un `scan_kind` et les anti-patterns.
 
-- [ ] **6.2 Runbook : ajouter ou retirer un worker Go en production**
+- [x] **6.2 Runbook : ajouter ou retirer un worker Go en production**
   - **Notes** : Étapes pour déployer N workers supplémentaires, vérifier qu'ils consomment bien (compteur custom `scan_worker_jobs_claimed_total` côté Go + dashboard GoodJob côté Rails), et les retirer proprement (drain — arrêter d'accepter de nouveaux jobs et finir ceux en cours via signal SIGTERM).
   - **Test plan** : Le runbook existe et a été exécuté manuellement une fois en environnement de staging.
+  - **Statut** : `docs/architecture/worker-scaling.md` livrée. Couvre 3 cibles (docker-compose / systemd / Kubernetes), métriques de vérification (dashboard GoodJob + Prometheus), drain SIGTERM avec `RECONAUT_DRAIN_TIMEOUT_SECONDS`, mise à jour rolling, anti-patterns (SIGKILL, scaling sans surveillance Postgres, bases divergentes). L'exécution manuelle en staging est différée jusqu'à ce que le runtime worker §5 existe.
 
 ---
 

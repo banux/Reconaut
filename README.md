@@ -45,6 +45,11 @@ Note de recherche : `openspec/research/graph-rag.md`.
   - comment ajouter un template Cypher au catalogue de l'agent.
 - [`docs/architecture/age-limits.md`](docs/architecture/age-limits.md)
   - limites d'Apache AGE et politique de fallback.
+- [`docs/architecture/scan-frontier.md`](docs/architecture/scan-frontier.md)
+  - frontiere Rails <-> workers Go, schemas de message, ajout d'un
+  nouveau type de scan.
+- [`docs/architecture/worker-scaling.md`](docs/architecture/worker-scaling.md)
+  - runbook : ajouter / retirer un worker Go en production.
 
 ## Licence
 
