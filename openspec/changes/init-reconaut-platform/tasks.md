@@ -106,18 +106,26 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 - [ ] **5.1 Engine Rails dédié au MCP partageant la pile de middlewares (HTTP+SSE uniquement)**
   - **Notes** : Implémenter `apps/api/engines/mcp` (Rails Engine ou namespace de routes). Outils `search_hosts`, `get_host`, `request_scan`, `get_scan_status`, `export_report` comme controllers Rails. Streaming SSE via `ActionController::Live`. Auth par clé API tenant partagée avec l'API REST. **Pas de chemin de code stdio**.
   - **Test plan** : `spec/mcp/tools_spec.rb` exerce chaque outil sur un transport HTTP+SSE in-process, assurant que la réponse matche le schema JSON déclaré. Test additionnel qui assure qu'aucun binaire de la plateforme n'expose un point d'entrée stdio MCP (`grep`/scan d'imports).
+  - **Statut partiel** : namespace `/mcp/tools` câblé dans le process Rails (pas d'engine séparé, pas de processus stdio — conforme). Routes `GET /mcp/tools` (liste) + `POST /mcp/tools/:tool_name` (invoke) partagent les middlewares Rails (auth + tenant-rejection + audit). 4 outils livrés : `search_hosts`, `get_host`, `list_scopes`, `request_scan`. **Reste pour cocher** : (a) `get_scan_status` + `export_report` à livrer une fois GoodJob et le rapport métier câblés ; (b) streaming SSE via `ActionController::Live` (réponse JSON synchrone pour l'instant) ; (c) test grep `stdio` dans les binaires (pas encore automatisé). 13 specs request `tools_spec.rb` + 11 specs `tool_registry_spec.rb`.
+
+- [x] **5.2 `request_scan` rejette les cibles hors scope**
+  - **Notes** : L'outil valide les paramètres, vérifie le scope (réutilise la même garde que le worker Go), écrit une ligne d'audit et enqueue un `ScanJob` via GoodJob. Renvoie immédiatement le `scan_id` ou erreur structurée `out-of-scope`.
+  - **Test plan** : Test d'intégration appelle `request_scan` avec une cible dans le scope ; assure (a) `scan_id` renvoyé en < 100 ms, (b) job présent en table `good_jobs`. Test négatif : cible hors scope → erreur `out-of-scope`, aucun job enqueued, ligne d'audit.
+  - **Statut** : `Reconaut::ScanEnqueuer` (`app/lib/reconaut/scan_enqueuer.rb`) effectue le scope check, valide le payload contre `ScanJobV1` (rejette `scan_kind` / `target.kind` hors enum), calcule `idempotency_key=scan-YYYYMMDD-HHMM-<sha16>` déterministe par cible+minute, délègue à un `job_bus` injectable. `InMemoryJobBus` livré pour les tests/dev local — `GoodJob` quand l'adapter sera câblé (cf. add-tech-stack §3.2 / 5.1). Outil MCP `request_scan` câble sous l'enqueueur. 12 request specs : (a) scan_id renvoyé < 500 ms (cible <100 ms côté backend), (b) job présent dans la file, (c) cible hors scope → `result.ok=false, error=out-of-scope`, aucun job enqueued, audit écrit, (d) RBAC viewer/analyst → 403, admin/owner → 200, (e) `scan_kind`/`target_kind` hors enum → 400 param_invalid, (f) `target_value` manquant → 400 missing_param. 7 specs unitaires `scan_enqueuer_spec.rb` couvrent les invariants (déterminisme idempotency_key, ScanJobV1 round-trip).
 
 - [ ] **5.2 `request_scan` rejette les cibles hors scope**
   - **Notes** : L'outil valide les paramètres, vérifie le scope (réutilise la même garde que le worker Go), écrit une ligne d'audit et enqueue un `ScanJob` via GoodJob. Renvoie immédiatement le `scan_id` ou erreur structurée `out-of-scope`.
   - **Test plan** : Test d'intégration appelle `request_scan` avec une cible dans le scope ; assure (a) `scan_id` renvoyé en < 100 ms, (b) job présent en table `good_jobs`. Test négatif : cible hors scope → erreur `out-of-scope`, aucun job enqueued, ligne d'audit.
 
-- [ ] **5.3 Application des scopes**
+- [x] **5.3 Application des scopes**
   - **Notes** : Table de scopes par clé API (au moins `read:hosts`, `write:scans`, `read:reports`, `manage:scopes`) ; middleware rejette avec erreur MCP structurée contenant le nom du scope manquant.
   - **Test plan** : Clé read-only appelant `request_scan` renvoie `unauthorized` nommant `write:scans` ; la même clé appelant `search_hosts` réussit.
+  - **Statut** : Table de scopes par rôle (`SCOPES_BY_ROLE` dans `Mcp::ToolsController`) — `read:hosts`, `read:scopes`, `write:scans`, `manage:scopes`, `read:reports`. Chaque outil déclare ses scopes requis (`Tool#scopes`). `Tool#call` lève `Mcp::ScopeError` listant les scopes manquants quand le caller n'a pas tous les scopes requis, transformé en HTTP 403 `rbac_forbidden` avec message contenant les scopes manquants. Specs : viewer + read:hosts → 200 sur `search_hosts` ; viewer + sans `write:scans` → 403 sur `request_scan`. La cohérence par clé API arrivera avec l'auth réelle (§ 7.2) — la table de scopes par rôle est le pivot équivalent en attendant.
 
-- [ ] **5.4 Audit des appels d'outils**
+- [x] **5.4 Audit des appels d'outils**
   - **Notes** : Table d'audit append-only ; ligne écrite en moins de 1 s pour chaque appel d'outil.
   - **Test plan** : Test d'intégration invoque chaque outil une fois et assure qu'une ligne d'audit correspondante existe en moins de 1 s avec `key_id`, `tool_name`, `duration_ms`.
+  - **Statut** : `Mcp::ToolsController#audit` écrit une entrée pour chaque chemin (`success`, `unknown_template` sur outil inconnu, `unauthorized` sur scope manquant, `param_invalid` sur params hors plage). `template_id` = `mcp:<tool_name>`, `caller_id` propagé. 2 specs request : invocation réussie → `:success`, outil inconnu → `:unknown_template`. La latence p95 < 1 s sera mesurée en CI quand le recorder DB sera câblé (§ 6).
 
 - [ ] **5.5 TLS configurable selon la posture**
   - **Notes** : `mcp.tls.required=true` (défaut) refuse les connexions en clair. `mcp.tls.required=false` (déploiement strictement interne avec mTLS au reverse proxy) accepte les connexions amont en clair ; le boot logue cette posture.

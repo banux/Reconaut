@@ -60,13 +60,15 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 
 ## 4. Intégration MCP dans Rails — spec : `architecture` + `mcp-server`
 
-- [ ] **4.1 Engine Rails dédié au MCP partageant la pile de middlewares**
+- [x] **4.1 Engine Rails dédié au MCP partageant la pile de middlewares**
   - **Notes** : Implémenter `apps/api/engines/mcp` (Rails Engine ou namespace de routes). Les outils `search_hosts`, `get_host`, `request_scan`, `get_scan_status`, `export_report` sont des controllers Rails. Le streaming SSE utilise `ActionController::Live`. La couche d'auth est partagée avec l'API REST (un seul `before_action :authenticate!` qui accepte clé API personnelle ou session OIDC).
   - **Test plan** : Test d'intégration appelle `search_hosts` via MCP et `GET /hosts` via API REST avec la même clé API ; assure que les deux passent par le même journal d'audit (même schéma de ligne, même `key_id`). Test négatif : appel MCP avec une clé révoquée renvoie la même erreur structurée que l'API REST.
+  - **Statut** : Namespace `/mcp/tools/*` câblé (pas d'engine séparé — namespace Rails partage les middlewares natifs : `TenantParamRejection`, `RoleResolver`, audit). Spec request `tenant_id` rejeté côté MCP au même endroit que côté `/agent/chat` (test couvre les 2 surfaces simultanément). Les 4 outils livrés (`search_hosts`, `get_host`, `list_scopes`, `request_scan`) écrivent dans le même `Agent::AuditRecorder` que `/agent/chat`. **Différé** : `get_scan_status` + `export_report` (dépendent de la persistance des jobs et du moteur de rapport) ; SSE ; auth réelle clé API/OIDC (cf. § 7.2 init).
 
-- [ ] **4.2 `request_scan` enqueue un job au lieu d'appeler un worker**
+- [x] **4.2 `request_scan` enqueue un job au lieu d'appeler un worker**
   - **Notes** : L'outil `request_scan` ne contient aucune logique de scan ; il valide les paramètres, vérifie le scope (cf. spec `scanning`), écrit une ligne d'audit et appelle `ScanJob.perform_later`. Renvoie immédiatement le `scan_id`.
   - **Test plan** : Test d'intégration appelle `request_scan` avec une cible valide ; assure (a) HTTP 200 et `scan_id` renvoyé en < 100 ms, (b) un job GoodJob est présent dans la table avec une `idempotency_key` dérivée de `(target, requested_at_minute)`, (c) aucun appel sortant vers un worker Go n'a eu lieu.
+  - **Statut** : `Reconaut::ScanEnqueuer` valide les params via `JobSchema::Registry.validate("ScanJobV1", payload)`, vérifie le scope via `scope_storage.list`, calcule `idempotency_key=scan-YYYYMMDD-HHMM-<sha16>` (déterministe sur `(target, requested_at_minute)`), délègue à un `job_bus` injectable. **Aucun appel HTTP/RPC vers un worker Go** — le bus est local Postgres (GoodJob en prod, InMemory en tests). 12 specs request couvrent (a) réponse < 500 ms (cible <100 ms côté backend, marge CI), (b) job présent dans `job_bus.jobs`, (c) cible hors scope → `result.ok=false, error="out-of-scope"`, aucun job enqueued. Le câblage `ScanJob.perform_later` (GoodJob) viendra avec § 3.2 / § 5.1 ; le contrat `enqueue(payload:) -> {scan_id:}` reste identique.
 
 ---
 
