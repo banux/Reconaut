@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://reconaut.dev/schemas/scan_job_v1.json",
+  "title": "ScanJobV1",
+  "description": "Job de scan emis par Rails et consomme par un worker Go via GoodJob. Cf. openspec/changes/add-tech-stack/specs/architecture/spec.md - Requirement: Rails - Go Communication via GoodJob.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "idempotency_key",
+    "scan_kind",
+    "target",
+    "requested_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "description": "Clef stable derivable de (target, fenetre temporelle). Garantit la deduplication cote worker."
+    },
+    "scan_kind": {
+      "type": "string",
+      "enum": [
+        "tcp_probe",
+        "tls_capture",
+        "http_banner",
+        "subdomain_enum",
+        "service_fingerprint"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["ip", "cidr", "domain", "host"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339 timestamp."
+    },
+    "options": {
+      "type": "object",
+      "description": "Parametres specifiques au scan_kind. Schema typage par scan_kind viendra dans un change ulterieur."
+    }
+  }
+}

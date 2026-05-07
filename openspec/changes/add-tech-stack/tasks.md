@@ -45,9 +45,10 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 
 ## 3. Contrat de message scan — spec : `architecture`
 
-- [ ] **3.1 Schéma de message versionné (`packages/job-schema/`)**
+- [x] **3.1 Schéma de message versionné (`packages/job-schema/`)**
   - **Notes** : Définir au minimum trois schémas — `ScanJobV1`, `ScanResultV1`, `Heartbeat` — avec un champ `schema_version: int`, une `idempotency_key: string`, un `target: { kind, value }`, et un `requested_at: rfc3339`. Format JSON Schema canonique. Côté Rails : validation via `json-schema` gem ou équivalent. Côté Go : génération de structs via `go-jsonschema` ou check via `xeipuuv/gojsonschema` au runtime.
   - **Test plan** : Test de round-trip Rails → Postgres (GoodJob) → Go qui sérialise un `ScanJobV1` côté Rails, le désérialise côté Go, vérifie l'égalité champ par champ. Test négatif : un message avec `schema_version=99` est rejeté côté worker avec une erreur explicite (pas un silent skip).
+  - **Statut** : trois schémas (`ScanJobV1`, `ScanResultV1`, `HeartbeatV1`) livrés sous `packages/job-schema/`. Validateur Rails `JobSchema::Registry` (gem `json-schema`, draft-06 forcé pour rester offline-friendly). Validateur Go `internal/jobschema` sans dépendance externe. 13 specs Rails + 9 tests Go couvrent : payload conforme, `schema_version` mauvais, `scan_kind` inconnu, `target.kind` inconnu, champ requis manquant, propriété supplémentaire, statut résultat inconnu, `inflight_jobs` négatif, schéma inconnu, round-trip d'un payload « shape Rails » vers le validateur Go. Le round-trip via la table `good_jobs` reste à câbler quand §3.2 sera fait (job bus Rails ↔ Go).
 
 - [ ] **3.2 `JobBus` côté Rails et consommateur côté Go**
   - **Notes** : Côté Rails, `config.active_job.queue_adapter = :good_job` ; classe `ScanJob < ApplicationJob` ; la couche métier publie via `ScanJob.perform_later(payload)`. Côté Go, package `goodjob` qui fait `SELECT ... FROM good_jobs WHERE finished_at IS NULL AND queue_name = $1 AND scheduled_at <= NOW() FOR UPDATE SKIP LOCKED` puis met à jour `performed_at`/`finished_at`. Optionnel : exploiter `LISTEN good_job` pour réveiller le poller. Tests utilisent une DB Postgres éphémère via `testcontainers-go` côté Go et une DB Rails fixture côté Rails.
