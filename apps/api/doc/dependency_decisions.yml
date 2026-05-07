@@ -1,0 +1,183 @@
+---
+# Decisions de licence pour license_finder.
+#
+# Cible : add-graph-retrieval section 9.1 (audit licence en CI). Toute
+# dependance ajoutee a apps/api doit porter une licence OSI-approved
+# compatible AGPL-3.0-only. Les licences ci-dessous sont approuvees par
+# defaut ; tout ce qui sort de cette liste declenche un action_item.
+
+- - :permit
+  - MIT
+  - :who:
+    :why: OSI-approved, ultra-permissive, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - Apache 2.0
+  - :who:
+    :why: OSI-approved, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - Apache-2.0
+  - :who:
+    :why: Identifiant SPDX moderne d'Apache 2.0 - meme licence que ci-dessus.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - BSD
+  - :who:
+    :why: BSD 2/3-clause, OSI-approved, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - New BSD
+  - :who:
+    :why: BSD-3-Clause, idem.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - Simplified BSD
+  - :who:
+    :why: BSD-2-Clause, idem.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - BSD-2-Clause
+  - :who:
+    :why: Identifiant SPDX BSD 2-clause.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - BSD-3-Clause
+  - :who:
+    :why: Identifiant SPDX BSD 3-clause.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - ISC
+  - :who:
+    :why: OSI-approved, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - MPL-2.0
+  - :who:
+    :why: Mozilla Public License 2.0, OSI-approved, compatible AGPL-3.0
+      (clause de compatibilite explicite).
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL
+  - :who:
+    :why: LGPL 2.1+ ou 3+, compatible AGPL-3.0 par construction.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL-2.1
+  - :who:
+    :why: Idem.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL-3.0
+  - :who:
+    :why: Idem.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL
+  - :who:
+    :why: GPL 2.0+ ou 3.0+, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL-2.0
+  - :who:
+    :why: Idem.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL-3.0
+  - :who:
+    :why: Idem.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL-3.0-only
+  - :who:
+    :why: Identifiant SPDX strict de GPLv3.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL-3.0-or-later
+  - :who:
+    :why: Identifiant SPDX moderne (GPLv3+). Compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL-2.0-only
+  - :who:
+    :why: Identifiant SPDX strict de GPLv2.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - GPL-2.0-or-later
+  - :who:
+    :why: GPLv2+ - compatible AGPL-3.0 via la clause "or any later version".
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL-2.1-only
+  - :who:
+    :why: Identifiant SPDX strict de LGPLv2.1.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL-2.1-or-later
+  - :who:
+    :why: LGPLv2.1+, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL-3.0-only
+  - :who:
+    :why: Identifiant SPDX strict de LGPLv3.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - LGPL-3.0-or-later
+  - :who:
+    :why: LGPLv3+, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - AGPL-3.0
+  - :who:
+    :why: Identique a la licence du projet.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - Ruby
+  - :who:
+    :why: License historique de Ruby (dual GPLv2 + custom). OSI-approved.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - Unlicense
+  - :who:
+    :why: Domaine public effectif, OSI-approved, compatible AGPL-3.0.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - CC0-1.0
+  - :who:
+    :why: Domaine public effectif.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z
+- - :permit
+  - 0BSD
+  - :who:
+    :why: BSD-zero-clause, equivalente Unlicense.
+    :versions: []
+    :when: 2026-05-07 00:00:00.000000000 Z

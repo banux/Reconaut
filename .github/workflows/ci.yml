@@ -37,6 +37,22 @@ jobs:
           bundler-cache: true
       - run: bundle exec rspec
 
+  api-license-audit:
+    name: api-license-audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          working-directory: apps/api
+          bundler-cache: true
+      # Echoue si une gem a une licence non listee dans
+      # apps/api/doc/dependency_decisions.yml. Couvre add-graph-retrieval 9.1.
+      - run: bundle exec license_finder action_items --decisions-file doc/dependency_decisions.yml
+
   web-vitest:
     name: web-vitest
     runs-on: ubuntu-latest

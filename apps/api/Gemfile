@@ -22,4 +22,8 @@ group :development, :test do
 
   # Suite de tests : RSpec (cf. add-tech-stack tasks 2.1).
   gem "rspec-rails", "~> 8.0"
+
+  # Audit de licence des dependances : interdit en CI toute gem dont la
+  # licence n'est pas compatible AGPL-3.0 (cf. add-graph-retrieval 9.1).
+  gem "license_finder", "~> 7.0", require: false
 end

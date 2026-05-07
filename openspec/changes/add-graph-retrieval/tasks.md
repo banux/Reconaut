@@ -44,7 +44,7 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
   - **Test plan** : Test qui charge le registry au boot et énumère les templates ; assure que chaque template a un schéma de paramètres et un Cypher non-vide.
   - **Statut** : `GraphTemplates::Registry` livré avec `register`, `fetch`, `resolve`, errors typées (`UnknownTemplateError`, `MissingParamError`, `ParamTypeError`, `ParamOutOfRangeError`, `TemplateNotReadOnlyError`). Le set noyau §3.2 sera enregistré dans une itération suivante.
 
-- [ ] **3.2 Set noyau de templates (≤ 10) — read-only, depth borné à 3**
+- [x] **3.2 Set noyau de templates (≤ 10) — read-only, depth borné à 3**
   - **Notes** : Set initial (modèle tenant unique : aucun paramètre `tenant_id`) :
     1. `cert_cluster(cert_sha256)` — hôtes partageant ce cert.
     2. `host_neighborhood(host_id, depth)` — voisinage via AS/range/cert (1–3 sauts).
@@ -57,6 +57,7 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
     9. `cve_exposed_count(cve_id)` — comptage agrégé.
     10. `subsidiaries_assets(parent_org_id)` — actifs des filiales déclarées d'une organisation.
   - **Test plan** : Pour chaque template, un test fixture-driven qui (a) seed un graphe minimal, (b) appelle le template avec des paramètres valides, (c) assure le résultat attendu, (d) assure que les paramètres invalides (out-of-range, ID inexistant) sont rejetés ou retournent un résultat vide propre.
+  - **Statut** : 10 templates enregistrés dans `apps/api/app/lib/graph_templates/core_set.rb`. Tous : (a) sans `tenant_id`, (b) read-only validés par `assert_read_only!`, (c) `depth` borné [1,3] et `limit` borné [1,100] vérifiés par tests négatifs, (d) cas négatifs spécifiques (cert_sha256 trop court, cve_id trop court, as_number non-entier, kind hors enum). 11 specs vertes. Reste : (a) seed graphe + assertions de résultat → gaté sur DB live ; sera ajouté quand l'intégration AGE sera câblée.
 
 - [x] **3.3 Linter `templates_lint` (read-only enforcement)**
   - **Notes** : Test CI qui parse chaque Cypher déclaré dans le registry et rejette toute occurrence (insensible à la casse, hors littéraux de chaîne) de `CREATE`, `MERGE`, `SET`, `DELETE`, `DETACH`, `REMOVE`. Échoue avec un message `template-not-readonly` nommant le template.
@@ -132,20 +133,23 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 8. Documentation interne
 
-- [ ] **8.1 Page « Comment ajouter un template graphe »**
+- [x] **8.1 Page « Comment ajouter un template graphe »**
   - **Notes** : Sous `docs/architecture/graph-templates.md`. Étapes : choisir un `template_id`, écrire le Cypher (read-only), déclarer le schéma de paramètres, ajouter une fixture, faire passer le linter et les tests.
   - **Test plan** : La page existe et est référencée depuis le README racine.
+  - **Statut** : `docs/architecture/graph-templates.md` livrée, référencée depuis le README racine.
 
-- [ ] **8.2 Notes sur les limites connues d'AGE**
+- [x] **8.2 Notes sur les limites connues d'AGE**
   - **Notes** : Documenter les patterns à éviter (traversées non bornées, agrégats sur tout le graphe, Cypher mutant glissé dans un template par mégarde) et la politique de fallback vers le retrieval vectoriel pur.
+  - **Statut** : `docs/architecture/age-limits.md` couvre patterns à éviter, politique de fallback (warning structuré + métriques), perf cibles, cohabitation TimescaleDB/pgvector/AGE, scénarios de panne. Référencée depuis le README.
 
 ---
 
 ## 9. Conformité open source / licence
 
-- [ ] **9.1 Audit de licence des nouvelles dépendances**
+- [x] **9.1 Audit de licence des nouvelles dépendances**
   - **Notes** : Tour de table avec `license_finder` (Ruby) et un équivalent Go sur les modules ajoutés. Toute dépendance NON OSI-approved ou NON compatible AGPL-3.0 (BSL, SSPL, Elastic License v2, Commons Clause, propriétaire) DOIT être rejetée.
   - **Test plan** : CI exécute `license_finder action_items` et l'équivalent Go ; échec si la liste retourne quoi que ce soit.
+  - **Statut** : `license_finder` ajouté côté Rails, allowlist AGPL-compatible dans `apps/api/doc/dependency_decisions.yml` (MIT, Apache-2.0, BSD, ISC, MPL-2.0, LGPL/GPL/AGPL incluant variantes SPDX `-only`/`-or-later`, Ruby, Unlicense, CC0-1.0, 0BSD). Job CI `api-license-audit` ajouté au workflow ; `bundle exec license_finder action_items` retourne **All dependencies are approved for use** sur les 92 gemmes. L'équivalent Go reste à câbler quand `apps/scanner` aura des dépendances externes (actuellement 0 — module Go de la stdlib pure).
 
 - [ ] **9.2 Test « instance air-gappée »**
   - **Notes** : Test d'intégration en CI qui démarre une instance Reconaut avec embedder local + sortie réseau bloquée (NetworkPolicy / iptables DROP en sortie sauf vers la DB). Ingère un scan synthétique, exécute chaque template du set noyau.

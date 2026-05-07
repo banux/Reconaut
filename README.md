@@ -39,6 +39,13 @@ Bootstrap en cours par iterations OpenSpec :
 
 Note de recherche : `openspec/research/graph-rag.md`.
 
+## Documentation
+
+- [`docs/architecture/graph-templates.md`](docs/architecture/graph-templates.md)
+  - comment ajouter un template Cypher au catalogue de l'agent.
+- [`docs/architecture/age-limits.md`](docs/architecture/age-limits.md)
+  - limites d'Apache AGE et politique de fallback.
+
 ## Licence
 
 AGPL-3.0-only. Voir `openspec/project.md` section *Gouvernance et distribution*.
