@@ -52,4 +52,33 @@ namespace :reconaut do
     puts JSON.pretty_generate(report.to_h)
     exit report.exit_code
   end
+
+  desc "Bootstrap : cree le compte owner initial. Idempotent (refuse si un user existe deja). " \
+       "Lit RECONAUT_BOOTSTRAP_OWNER_EMAIL et RECONAUT_BOOTSTRAP_OWNER_PASSWORD."
+  task bootstrap_owner: :environment do
+    require "reconaut/auth/bootstrap"
+
+    email    = ENV["RECONAUT_BOOTSTRAP_OWNER_EMAIL"].to_s.strip
+    password = ENV["RECONAUT_BOOTSTRAP_OWNER_PASSWORD"].to_s
+
+    if email.empty? || password.empty?
+      warn "RECONAUT_BOOTSTRAP_OWNER_EMAIL and RECONAUT_BOOTSTRAP_OWNER_PASSWORD required"
+      exit 64 # EX_USAGE
+    end
+
+    begin
+      result = Reconaut::Auth::Bootstrap.call(email: email, password: password)
+    rescue Reconaut::Auth::Bootstrap::AlreadyInitializedError => e
+      warn "bootstrap-already-initialized: #{e.message}"
+      exit 65 # EX_DATAERR
+    end
+
+    payload = {
+      user:    result[:user].to_h,
+      api_key: result[:api_key]
+    }
+    puts JSON.pretty_generate(payload)
+    warn "WARNING: l'API key affichee ci-dessus n'est plus consultable. " \
+         "Stockez-la maintenant, sinon il faudra en generer une autre."
+  end
 end
