@@ -19,7 +19,7 @@ module Agent
     #
     # Use case pur : aucun couplage Rails, aucune DB ; tout est injectable.
     class HandleQuery
-      AUTHORIZED_ROLES = %i[analyst admin owner].freeze
+      AUTHORIZED_ROLES = %i[analyst admin owner mcp_client].freeze
 
       Result = Struct.new(:status, :body, keyword_init: true) do
         def http_status

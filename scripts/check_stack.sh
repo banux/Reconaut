@@ -2,6 +2,7 @@
 # scripts/check_stack.sh - linter de stack
 #
 # Source de verite : openspec/changes/add-tech-stack/tasks.md section 2.3
+#                  + openspec/changes/init-reconaut-platform/tasks.md section 1.3
 #
 # Refuse toute violation des invariants stack figes par add-tech-stack :
 #   - frontend Vue 3 uniquement (pas de React/Angular/Svelte)
@@ -9,6 +10,8 @@
 #   - aucun broker externe pour la file de jobs (Redis/RabbitMQ/NATS/Kafka)
 #   - aucune colonne `tenant_id` dans les migrations Rails ou schemas Go
 #     (modele tenant unique)
+#   - aucun SDK d'analytics tiers (Mixpanel, Segment, Amplitude, PostHog,
+#     Plausible server SDK, Matomo) - cf. init-reconaut-platform 1.3
 #
 # Iteration courante : verification simple basee sur grep + extensions de
 # fichier. Sera enrichie quand les sous-apps existeront (parsing AST,
@@ -71,6 +74,29 @@ fi
 if [[ -d apps/scanner ]]; then
   if grep -RinE 'tenant_?id' apps/scanner --include='*.go' 2>/dev/null | grep -q .; then
     fail "code Go reference tenant_id (modele tenant unique)"
+  fi
+fi
+
+# --- pas de SDK d'analytics tiers --------------------------------------------
+# Liste des patterns d'analytics interdits, cf. init-reconaut-platform 1.3.
+analytics_pattern='(mixpanel|segment-analytics|@?segment/analytics|amplitude|posthog|plausible-tracker|matomo-tracker)'
+
+if [[ -f apps/api/Gemfile ]]; then
+  if grep -iE "gem\s+[\"']${analytics_pattern}" apps/api/Gemfile >/dev/null 2>&1; then
+    fail "apps/api/Gemfile reference un SDK d'analytics tiers (mixpanel/segment/amplitude/posthog/plausible/matomo)"
+  fi
+fi
+
+if [[ -f apps/web/package.json ]]; then
+  # Match "mixpanel", "mixpanel-browser", "@segment/analytics", etc.
+  if grep -iE "\"[^\"]*${analytics_pattern}[^\"]*\"\\s*:" apps/web/package.json >/dev/null 2>&1; then
+    fail "apps/web/package.json reference un SDK d'analytics tiers"
+  fi
+fi
+
+if [[ -d apps/scanner ]] && [[ -f apps/scanner/go.mod ]]; then
+  if grep -iE "(mixpanel|segmentio/analytics|amplitude|posthog|plausible|matomo)" apps/scanner/go.mod >/dev/null 2>&1; then
+    fail "apps/scanner/go.mod reference un SDK d'analytics tiers"
   fi
 fi
 

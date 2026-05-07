@@ -22,7 +22,7 @@ module Scopes
     # Roles autorises a muter le scope. La lecture est autorisee aussi
     # a viewer (pour que la sidebar de l'UI reste navigable). Seuls
     # admin/owner mutent.
-    READ_ROLES  = %i[viewer analyst admin owner].freeze
+    READ_ROLES  = %i[viewer analyst admin owner mcp_client].freeze
     WRITE_ROLES = %i[admin owner].freeze
 
     class List

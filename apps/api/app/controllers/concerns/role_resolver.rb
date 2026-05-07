@@ -18,7 +18,16 @@
 module RoleResolver
   extend ActiveSupport::Concern
 
-  ROLES = %i[viewer analyst admin owner].freeze
+  # Roles cf. init-reconaut-platform 7.3.
+  #   - viewer     : lecture seule du dataset (pas /agent/chat).
+  #   - analyst    : viewer + agent + lecture des resultats.
+  #   - admin      : analyst + scope mutation + write:scans.
+  #   - owner      : admin + tout.
+  #   - mcp_client : profil agent externe (cle API service-to-service).
+  #     Equivalent analyst sur les outils MCP de lecture + write:scans
+  #     pour declencher des scans, mais PAS de droit sur la mutation
+  #     du scope (reservee a admin/owner).
+  ROLES = %i[viewer analyst admin owner mcp_client].freeze
 
   def caller_role
     @caller_role ||= resolve_role

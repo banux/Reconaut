@@ -16,10 +16,11 @@ module Mcp
     include RoleResolver
 
     SCOPES_BY_ROLE = {
-      viewer:  [:"read:hosts", :"read:scopes"],
-      analyst: [:"read:hosts", :"read:scopes"],
-      admin:   [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes"],
-      owner:   [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes", :"read:reports"]
+      viewer:     [:"read:hosts", :"read:scopes"],
+      analyst:    [:"read:hosts", :"read:scopes"],
+      mcp_client: [:"read:hosts", :"read:scopes", :"write:scans"],
+      admin:      [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes"],
+      owner:      [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes", :"read:reports"]
     }.freeze
 
     def invoke

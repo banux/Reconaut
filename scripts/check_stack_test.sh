@@ -72,6 +72,18 @@ echo '[package]' > Cargo.toml
 assert_lint "rogue Cargo.toml -> exit != 0" 1
 rm -f Cargo.toml
 
+# --- 7. SDK d'analytics tiers cote Rails ---
+cp apps/api/Gemfile apps/api/Gemfile.bak
+echo 'gem "posthog-ruby"' >> apps/api/Gemfile
+assert_lint "posthog gem in apps/api/Gemfile -> exit != 0" 1
+mv apps/api/Gemfile.bak apps/api/Gemfile
+
+# --- 8. SDK d'analytics tiers cote Vue ---
+cp apps/web/package.json apps/web/package.json.bak
+node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("apps/web/package.json"));p.dependencies["mixpanel-browser"]="^2.0.0";fs.writeFileSync("apps/web/package.json", JSON.stringify(p, null, 2))'
+assert_lint "mixpanel-browser in apps/web/package.json -> exit != 0" 1
+mv apps/web/package.json.bak apps/web/package.json
+
 # --- 7. Etat propre apres cleanup ---
 assert_lint "clean tree (post-cleanup) -> exit 0" 0
 

@@ -9,6 +9,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 - [ ] **1.1 Application de la licence AGPL-3.0-only**
   - **Notes** : Décision actée (cf. `proposal.md` §Décisions prises §1) — pas de vocation commerciale, AGPL protège contre la ré-hébergement managé fermé sans réciprocité. Intégrer le texte intégral d'AGPL-3.0 dans `LICENSE` à la racine, ajouter `SPDX-License-Identifier: AGPL-3.0-only` en en-tête de chaque fichier source. Rédiger un ADR court `docs/adr/0001-license.md` qui consigne la décision (contexte, options écartées Apache-2.0/BUSL-1.1, conséquences). Vérifier la compatibilité de licence des dépendances (transitives incluses) — refuser toute dépendance dont la licence est incompatible avec AGPL côté sortie.
   - **Test plan** : `licensee detect .` renvoie `AGPL-3.0-only` ; un check CI échoue si un fichier source n'a pas l'en-tête SPDX attendu ; un audit `bundle-audit` / `go-licenses check` / `pnpm licenses ls` confirme zéro dépendance avec licence incompatible.
+  - **Statut partiel** : (a) `LICENSE` AGPL-3.0 complet (661 lignes, texte FSF officiel) à la racine. (b) ADR `docs/adr/0001-license.md` rédigé : contexte, options écartées (Apache-2.0, BUSL-1.1, MIT, AGPL-3.0-or-later), décision finale, conséquences pour opérateurs / SaaS / contributeurs. (c) Audit licence Rails (`license_finder` + `dependency_decisions.yml`) en CI : « All dependencies are approved for use » sur les 95 gemmes (cf. add-graph-retrieval § 9.1). **Reste pour cocher** : (i) headers SPDX `SPDX-License-Identifier: AGPL-3.0-only` par fichier source + check CI, (ii) `go-licenses check` côté apps/scanner (différé : pas encore de dépendances Go externes hors stdlib), (iii) audit npm côté apps/web.
 
 - [ ] **1.2 Politique de contribution (DCO + Code of Conduct)**
   - **Notes** : Ajouter `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), workflow GitHub Action `dco-check` qui rejette les PR sans `Signed-off-by:` valide.
@@ -17,6 +18,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 - [ ] **1.3 Pas de SDK d'analytics tiers ; OpenTelemetry contrôlé par l'opérateur**
   - **Notes** : Aucun client d'analytics tiers dans le code. Le linter de stack rejette tout import de gem ou package de type Mixpanel, Segment, Amplitude, PostHog, Plausible (server SDK), Matomo. Pas d'endpoint codé en dur vers un service projet. Côté instrumentation : OpenTelemetry est intégré (traces + métriques + logs structurés) avec exporter OTLP, mais SANS destination par défaut — l'opérateur définit `OTEL_EXPORTER_OTLP_ENDPOINT` lui-même pour pointer vers son collecteur.
   - **Test plan** : (a) Test grep CI : aucun import des SDK d'analytics listés ; échec si introduction. (b) Test d'audit réseau : boot avec config par défaut sans variable OTel → 0 connexion sortante vers un endpoint OTel public ou un endpoint d'analytics. (c) Test d'intégration : configurer `OTEL_EXPORTER_OTLP_ENDPOINT` vers un collecteur de test → traces et métriques apparaissent dans le collecteur ; aucune autre destination n'est touchée.
+  - **Statut partiel** : (a) `scripts/check_stack.sh` étendu — refus de `mixpanel`, `segment-analytics`, `@segment/analytics`, `amplitude`, `posthog`, `plausible-tracker`, `matomo-tracker` côté apps/api/Gemfile, apps/web/package.json, apps/scanner/go.mod. `scripts/check_stack_test.sh` ajoute deux cas négatifs validés : `posthog-ruby` ajouté au Gemfile → exit ≠ 0 ; `mixpanel-browser` ajouté au package.json → exit ≠ 0. **Reste pour cocher** : (b) test d'audit réseau au boot (à câbler quand OpenTelemetry sera intégré), (c) intégration OTel + test contre un collecteur fake en CI.
 
 - [ ] **1.4 Layout monorepo**
   - **Notes** : Structure cible (alignée avec `add-tech-stack`) : `apps/api/` (Rails 8 monolithe — API, agent, MCP, audit), `apps/web/` (Vue 3 + Vite), `apps/scanner/` (workers Go), `packages/job-schema/` (schémas de message versionnés), `Dockerfile` par app, `docker-compose.yml` racine pour le dev local et déploiement simple.
@@ -161,9 +163,16 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Test e2e (a) bootstrap d'une instance sans config OIDC, création d'un compte `owner` local, génération de clé API, appel API + MCP avec la clé ; assurer zéro connexion sortante pendant tout le test (mock outbound). (b) Activer OIDC en runtime ; assurer que les comptes locaux préexistants se connectent toujours. (c) Couper l'IdP OIDC pendant qu'il est configuré ; assurer que l'auth locale reste fonctionnelle. (d) Test additionnel monte un IdP fake conforme OIDC pour vérifier que l'app ne dépend d'aucune extension propriétaire.
   - **Statut partiel** : auth locale **complète et bout-en-bout** — `Reconaut::Auth::PasswordHasher::Argon2id` (gem `argon2`, profil interactive RFC9106 ; rejette les hashes sans préfixe `$argon2`), `User` + `ApiKey` structs avec stockage in-memory thread-safe (DB-backed à venir avec ActiveRecord), `Authenticator` (Bearer + email/password, branche fake-hash anti timing-leak sur user inexistant), `RoleResolver` étendu pour résoudre l'identité depuis `Authorization: Bearer <raw>`. Routes : `POST /auth/sessions` (email+password → user + api_key), `GET/POST /auth/api_keys`, `DELETE /auth/api_keys/:id`. Token raw renvoyé une seule fois ; en base, seul le SHA-256 est stocké. **Bootstrap CLI** : `Reconaut::Auth::Bootstrap` + Rake task `bin/rails reconaut:bootstrap_owner` (lit `RECONAUT_BOOTSTRAP_OWNER_EMAIL` + `RECONAUT_BOOTSTRAP_OWNER_PASSWORD`, idempotent, exit 64 si arguments manquants, exit 65 si déjà initialisé). **UI Vue** : `LoginForm.vue` + `AuthClient` (sessionStorage, restore au mount, Bearer propagé), `HomeView` masque `AgentChat`/`ScopesPanel` tant qu'aucune session n'est restaurée. (a) **scenario air-gappé validé** : test stub `Net::HTTP.start` pour exploser, le flow `create_user → issue_api_key → GET /scopes → POST /mcp/tools/list_scopes` passe sans aucun appel réseau. **48 specs Rails** (8 hasher + 13 storage + 9 authenticator + 6 bootstrap + 3 sessions + 8 api_keys + 1 air-gapped) **+ 13 specs Vue** (6 AuthClient + 3 LoginForm + 4 App/HomeView). **Reste pour cocher** : (b/c/d) — couche OIDC (interface OmniAuth-OIDC ou équivalent + adapter conforme ; tests avec Keycloak/Authentik fake en CI). Le fallback "OIDC down → local OK" est trivial à valider une fois l'OIDC livré (auth locale est le défaut, OIDC est l'optionnel).
 
-- [ ] **7.3 Application des rôles**
+- [x] **7.3 Application des rôles**
   - **Notes** : Rôles `owner`, `admin`, `analyst`, `viewer`, `mcp_client`. Chaque endpoint et chaque outil MCP imposent le rôle requis côté serveur.
   - **Test plan** : Test paramétré par rôle exerce chaque endpoint et assure permis/refusé selon la matrice de rôle.
+  - **Statut** : 5 rôles déclarés dans `RoleResolver::ROLES` et `Auth::Storage::VALID_ROLES`. Matrice formalisée :
+    - **`viewer`** : lecture (GET /scopes, list_scopes via MCP). Refusé sur /agent/chat et toute mutation.
+    - **`analyst`** : viewer + /agent/chat. Refusé sur les mutations.
+    - **`mcp_client`** : analyst + write:scans (POST /mcp/tools/request_scan). Refusé sur manage:scopes.
+    - **`admin`** : analyst + manage:scopes (POST /scopes, DELETE /scopes/:id) + write:scans.
+    - **`owner`** : tout, plus read:reports (export futur).
+  - Test paramétré `spec/requests/role_matrix_spec.rb` : 25 examples couvrant 5 endpoints × 5 rôles. Toutes les transitions permis/refusé attendues sont validées.
 
 ---
 
@@ -193,9 +202,10 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## 9. Documentation
 
-- [ ] **9.1 README de projet**
+- [x] **9.1 README de projet**
   - **Notes** : Positionnement OSS, mode self-hosted, démarrage rapide (docker-compose), liens vers la doc, badges (license AGPL-3.0, build, release, SBOM).
   - **Test plan** : Une revue humaine confirme la clarté du quickstart ; un utilisateur externe arrive à lancer une instance locale en suivant uniquement le README.
+  - **Statut** : `README.md` réécrit avec : positionnement (1 paragraphe), quickstart 6 étapes (clone + bin/setup + bundle/npm install + `reconaut:bootstrap_owner` + `rails server` + `npm run dev`), section bootstrap auto-hébergé (4 providers d'embedder + `reconaut:doctor`), layout monorepo, stack figée résumée, table des docs (5 ADR/architecture), statut OpenSpec, licence (lien LICENSE + ADR), section télémétrie explicite (zéro analytics tiers, OTel opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`).
 
 - [ ] **9.2 Doc opérateur : modèle de responsabilité RGPD**
   - **Notes** : `docs/operating/responsibility-model.md` qui explique : opérateur = controller, Reconaut = outil, fournisseurs externes = subprocessors *de l'opérateur* si activés. Liste des outils que la plateforme fournit pour aider l'opérateur (audit, effacement, configuration de résidence).

@@ -44,7 +44,7 @@ module Reconaut
       end
     end
 
-    VALID_ROLES = %i[viewer analyst admin owner].freeze
+    VALID_ROLES = %i[viewer analyst admin owner mcp_client].freeze
 
     # Stockage en memoire (tests + dev local). DB-backed via ActiveRecord
     # quand le modele User sera cree par init-reconaut-platform.
