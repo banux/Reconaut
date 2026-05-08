@@ -1,5 +1,5 @@
 config.json
-models/
+/models/
 vectors.db
 
 # OS / editeurs

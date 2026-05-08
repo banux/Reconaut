@@ -29,6 +29,10 @@ class EnableGraphExtensions < ActiveRecord::Migration[8.1]
       DO $$
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM ag_catalog.ag_graph WHERE name = 'reconaut') THEN
+          -- Si le schema "reconaut" traîne d'une tentative précédente
+          -- aboutie partiellement, on l'efface — sans ça
+          -- create_graph() lève "schema already exists".
+          EXECUTE 'DROP SCHEMA IF EXISTS reconaut CASCADE';
           PERFORM ag_catalog.create_graph('reconaut');
         END IF;
       END

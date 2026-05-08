@@ -8,14 +8,22 @@ require_relative "../config/environment"
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require "rspec/rails"
 
-# Skip schema maintenance : aucune migration n'est jouee tant que les
-# tests ne ciblent pas la DB (les tests use_cases utilisent in-memory).
-# Quand la DB de test sera disponible, retirer ce begin/rescue.
+# Schema maintenance : on évite `maintain_test_schema!` parce qu'il
+# tente de charger schema.rb, qui ne représente pas encore les tables
+# AGE (ag_catalog). À la place, on joue les migrations explicitement ;
+# si la DB est indisponible, on warn et les specs DB-bound se skippent
+# individuellement.
 begin
-  ActiveRecord::Migration.maintain_test_schema!
-rescue ActiveRecord::PendingMigrationError, ActiveRecord::NoDatabaseError,
-       ActiveRecord::ConnectionNotEstablished, PG::ConnectionBad => _
+  ActiveRecord::Base.connection.execute("SELECT 1")
+  was_verbose = ActiveRecord::Migration.verbose
+  ActiveRecord::Migration.verbose = false
+  ActiveRecord::Tasks::DatabaseTasks.migrate
+  ActiveRecord::Migration.verbose = was_verbose
+rescue ActiveRecord::NoDatabaseError, ActiveRecord::ConnectionNotEstablished,
+       PG::ConnectionBad => _
   warn "[rails_helper] DB indisponible - les tests qui en dependent seront skippes."
+rescue StandardError => e
+  warn "[rails_helper] migration test DB a échoué : #{e.class}: #{e.message}"
 end
 
 RSpec.configure do |config|

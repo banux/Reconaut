@@ -32,7 +32,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## 2. Capacité de scan — spec : `scanning`
 
-- [ ] **2.1 Modèle de domaine et stockage time-partitionné**
+- [x] **2.1 Modèle de domaine et stockage time-partitionné**
   - **Notes** : Modèles `Host`, `Service`, `Scan`, `ScanScopeEntry` (avec colonnes `id`, `kind` ∈ `{cidr, domain, host}`, `value`, `description`, `created_by`, `created_at`, `revoked_at`). Hypertable TimescaleDB sur `services(scanned_at)` avec chunks journaliers ; pg_partman pour la rétention.
   - **Test plan** : `bundle exec rspec spec/models/scan_scope_entry_spec.rb` couvre la validation des trois `kind`, le rejet des CIDR invalides, l'historisation. `spec/models/host_spec.rb` assure que l'hypertable est créée et qu'une politique de rétention 90 jours est attachée.
 
