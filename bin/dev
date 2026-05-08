@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# bin/dev — lance l'environnement de développement Reconaut local.
+#
+# Démarre :
+#   1. Postgres (TimescaleDB + pgvector + Apache AGE) via docker-compose.
+#   2. Rails API (apps/api, port 3000) — héberge le serveur MCP HTTP+SSE.
+#   3. Les 6 workers Go spécialisés (scanner-tcp_probe, scanner-tls_capture,
+#      scanner-http_banner, scanner-subdomain_enum, scanner-service_fingerprint,
+#      scanner-dns_records) en mode --dry-run par défaut.
+#
+# Usage :
+#   bin/dev                  # tout démarrer (logs concaténés, Ctrl-C pour arrêter)
+#   bin/dev --no-scanners    # juste Postgres + Rails
+#   bin/dev --no-rails       # juste Postgres + scanners (utile pour debug worker)
+#   bin/dev --postgres-only  # juste Postgres (équivalent docker compose up postgres)
+#   bin/dev --real-db        # démarre les scanners contre la vraie DB (sans --dry-run)
+#
+# Variables d'env honorées :
+#   RECONAUT_DATABASE_URL  forwardée aux workers Go quand --real-db.
+#   RAILS_PORT             port d'écoute Rails (défaut 3000).
+#   RECONAUT_DNS_RESOLVER  forwardée à scanner-dns_records.
+#
+# Le script trap SIGINT/SIGTERM pour stopper proprement tous les
+# process enfants (Postgres reste en background — utiliser
+# `docker compose down` pour l'arrêter complètement).
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# --- options ----------------------------------------------------------------
+START_POSTGRES=1
+START_RAILS=1
+START_SCANNERS=1
+REAL_DB=0
+RAILS_PORT="${RAILS_PORT:-3000}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-scanners)   START_SCANNERS=0 ;;
+    --no-rails)      START_RAILS=0 ;;
+    --postgres-only) START_RAILS=0; START_SCANNERS=0 ;;
+    --real-db)       REAL_DB=1 ;;
+    -h|--help)
+      sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//;$d'
+      exit 0
+      ;;
+    *)
+      echo "bin/dev: unknown option $1" >&2
+      exit 64
+      ;;
+  esac
+  shift
+done
+
+# --- couleurs / log helpers -------------------------------------------------
+if [[ -t 1 ]]; then
+  C_DIM='\033[2m'; C_BOLD='\033[1m'; C_BLUE='\033[34m'; C_GREEN='\033[32m'; C_YELLOW='\033[33m'; C_RED='\033[31m'; C_RESET='\033[0m'
+else
+  C_DIM=''; C_BOLD=''; C_BLUE=''; C_GREEN=''; C_YELLOW=''; C_RED=''; C_RESET=''
+fi
+log()  { printf '%b==> reconaut/dev: %b%s%b\n' "$C_BOLD$C_BLUE" "$C_RESET$C_BOLD" "$*" "$C_RESET"; }
+warn() { printf '%bwarning:%b %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+fail() { printf '%berror:%b %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+
+# --- prérequis --------------------------------------------------------------
+require() { command -v "$1" >/dev/null 2>&1 || fail "$1 manquant ($2)"; }
+require docker "https://docs.docker.com/engine/install/"
+[[ $START_RAILS -eq 1 ]]    && require bundle "Ruby/Bundler — installer Ruby 3.4+ via mise/asdf"
+[[ $START_SCANNERS -eq 1 ]] && require go "https://go.dev/dl/"
+
+# --- cleanup ---------------------------------------------------------------
+PIDS=()
+cleanup() {
+  log "shutting down child processes…"
+  for pid in "${PIDS[@]:-}"; do
+    [[ -n "$pid" ]] && kill -TERM "$pid" 2>/dev/null || true
+  done
+  # Laisse 3 s pour TERM, puis force.
+  sleep 1
+  for pid in "${PIDS[@]:-}"; do
+    [[ -n "$pid" ]] && kill -KILL "$pid" 2>/dev/null || true
+  done
+  log "done. Postgres reste up (docker compose down pour l'arrêter)."
+}
+trap cleanup EXIT INT TERM
+
+# --- Postgres ---------------------------------------------------------------
+if [[ $START_POSTGRES -eq 1 ]]; then
+  log "starting Postgres (TimescaleDB + pgvector + Apache AGE)"
+  docker compose up -d postgres >/dev/null
+  # Healthcheck inline.
+  for _ in $(seq 1 30); do
+    if docker compose ps postgres --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
+      log "Postgres up (5432, db=reconaut_development, user=reconaut)"
+      break
+    fi
+    sleep 1
+  done
+fi
+
+# --- Rails ------------------------------------------------------------------
+if [[ $START_RAILS -eq 1 ]]; then
+  log "starting Rails API on port $RAILS_PORT"
+  (
+    cd apps/api
+    if [[ ! -f Gemfile.lock ]] || ! bundle check >/dev/null 2>&1; then
+      log "running bundle install (first run)"
+      bundle install
+    fi
+    exec bundle exec rails server -b 0.0.0.0 -p "$RAILS_PORT"
+  ) 2>&1 | sed 's|^|[rails]   |' &
+  PIDS+=("$!")
+fi
+
+# --- Scanners Go ------------------------------------------------------------
+if [[ $START_SCANNERS -eq 1 ]]; then
+  if [[ -d apps/scanner ]] && [[ -f apps/scanner/go.mod ]]; then
+    log "downloading Go module dependencies"
+    (cd apps/scanner && go mod download)
+
+    SCAN_KINDS=(tcp_probe tls_capture http_banner subdomain_enum service_fingerprint dns_records)
+    DRY_FLAG="--dry-run"
+    [[ $REAL_DB -eq 1 ]] && DRY_FLAG=""
+
+    for kind in "${SCAN_KINDS[@]}"; do
+      log "starting scanner-$kind"
+      (
+        cd apps/scanner
+        exec go run "./cmd/scanner-$kind" $DRY_FLAG --idle-backoff 1s
+      ) 2>&1 | sed "s|^|[$kind] |" &
+      PIDS+=("$!")
+    done
+  else
+    warn "apps/scanner absent ou non bootstrappé — scanners non lancés"
+  fi
+fi
+
+# --- attendre ---------------------------------------------------------------
+log "all services up. Press Ctrl-C to stop."
+log "  Rails / MCP HTTP+SSE : http://localhost:$RAILS_PORT/healthz"
+log "  Postgres             : postgres://reconaut:reconaut_dev_password@localhost:5432/reconaut_development"
+
+# Attente bloquante : on attend sur le premier process qui meurt.
+# (`wait -n` retourne dès qu'un enfant termine.)
+if [[ ${#PIDS[@]} -gt 0 ]]; then
+  wait -n
+  warn "un service enfant est sorti — propagation du shutdown"
+else
+  # Mode --postgres-only : pas de service à attendre, on bloque.
+  log "(mode postgres-only : Postgres tourne en background, exit du script)"
+fi

@@ -26,13 +26,25 @@ docker compose build postgres
 echo "==> starting postgres"
 docker compose up -d postgres
 
-# Bloc actif quand apps/api existera :
-# (cd apps/api && bundle install)
+# Bootstrap des sous-apps si elles existent.
+if [[ -f apps/api/Gemfile ]] && command -v bundle >/dev/null 2>&1; then
+  echo "==> apps/api : bundle install"
+  (cd apps/api && bundle install)
+fi
 
-# Bloc actif quand apps/scanner existera :
-# (cd apps/scanner && go mod download)
+if [[ -f apps/scanner/go.mod ]] && command -v go >/dev/null 2>&1; then
+  echo "==> apps/scanner : go mod download"
+  (cd apps/scanner && go mod download)
+fi
 
-# Bloc actif quand apps/tui existera (binaire reconautctl) :
-# (cd apps/tui && go mod download)
+if [[ -f apps/tui/go.mod ]] && command -v go >/dev/null 2>&1; then
+  echo "==> apps/tui : go mod download"
+  (cd apps/tui && go mod download)
+fi
 
-echo "==> setup ok (iteration bootstrap)"
+echo "==> setup ok"
+echo
+echo "Lancer l'environnement de dev complet :"
+echo "    bin/dev                    # Postgres + Rails + 6 scanners (dry-run)"
+echo "    bin/dev --postgres-only    # juste Postgres"
+echo "    bin/dev --help             # détail des options"

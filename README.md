@@ -21,30 +21,28 @@ ete retiree au profit de la TUI Go `reconautctl`.
 git clone https://github.com/banux/Reconaut.git
 cd Reconaut
 
-# 1. Demarrer Postgres (TimescaleDB + pgvector + Apache AGE).
+# 1. Bootstrap : demarre Postgres + bundle install + go mod download.
 bin/setup
 
-# 2. Installer les dependances des sous-apps.
-(cd apps/api && bundle install)
-(cd apps/scanner && go mod download)
-(cd apps/tui && go mod download)
-
-# 3. Poser le password de l'opérateur unique (mono-user). Idempotent :
+# 2. Poser le password de l'opérateur unique (mono-user). Idempotent :
 #    refuse si un user existe déjà.
 RECONAUT_OPERATOR_PASSWORD='changez-moi' \
   (cd apps/api && bundle exec rails reconaut:set_password)
 # -> imprime { user, api_key } : NOTEZ l'api_key.token, plus jamais consultable.
 
-# 4. Lancer Rails en API (heberge MCP HTTP+SSE).
-(cd apps/api && bundle exec rails server)
+# 3. Lancer l'environnement de dev complet : Postgres + Rails + 6 scanners.
+bin/dev
+# -> http://localhost:3000/healthz
+#    Ctrl-C pour stopper. Voir `bin/dev --help` pour les options
+#    (--no-scanners, --no-rails, --postgres-only, --real-db).
 
-# 5. Construire et logguer la TUI operateur.
+# 4. (autre terminal) Construire et logguer la TUI operateur.
 (cd apps/tui && go build ./cmd/reconautctl)
 RECONAUT_URL=http://localhost:3000 RECONAUT_PASSWORD='changez-moi' \
   apps/tui/reconautctl login
 # -> stocke la cle API dans $XDG_CONFIG_HOME/reconaut/credentials (0600).
 
-# 6. Lancer les tests.
+# 5. Lancer les tests.
 bin/test
 ```
 
