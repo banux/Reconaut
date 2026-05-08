@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Authentication (Single Operator)
-Reconaut est livré en mode **mono-user** en v1. Une instance = **un seul opérateur humain**, identifié par un mot de passe local hashé Argon2id. Aucune notion de rôle, aucun second compte, aucun mécanisme d'invitation. L'authentification DOIT se faire **localement** — pas de support OIDC ou autre IdP externe en v1. Un MSSP qui veut servir plusieurs clients DOIT déployer plusieurs instances Reconaut indépendantes (cohérent avec le modèle tenant unique).
+Reconaut est livré en mode **mono-user** en v1. Une instance = **un seul opérateur humain**, identifié par un mot de passe local hashé Argon2id. Aucune notion de rôle, aucun second compte, aucun mécanisme d'invitation. L'authentification DOIT se faire **localement** — pas de support OIDC ou autre IdP externe en v1. Un opérateur qui veut isoler plusieurs périmètres DOIT déployer plusieurs instances Reconaut indépendantes (cohérent avec le modèle tenant unique).
 
 L'opérateur DOIT pouvoir générer **plusieurs clés API** rattachées à son compte unique, chacune portant son propre set de scopes MCP (défense-en-profondeur : la TUI prend une clé full-scope, un agent IA externe peut prendre une clé `read:hosts` + `read:scans` uniquement, etc.). La révocation d'une clé n'affecte pas les autres.
 

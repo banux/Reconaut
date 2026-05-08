@@ -1,13 +1,16 @@
 # Reconaut
 
-**Outil open source auto-hebergeable d'Attack Surface Management.** Reconaut
-scanne le perimetre d'actifs internet **explicitement declare par l'operateur**
-(CIDR, domaines, hotes), avec l'IA en capacite de premier ordre :
-optimisation des scans pilotee par IA, agent conversationnel sur le jeu de
-donnees indexe, serveur MCP pour les agents externes.
+**Base de connaissance d'actifs internet pour agents IA, auto-hebergeable et
+scope-driven.** Reconaut maintient un graphe d'actifs scope par l'operateur
+(CIDR, domaines, hotes) que ses agents IA et ses autres outils consomment via
+**MCP HTTP+SSE**. Mono-user, AGPL-3.0, integrable avec la stack securite
+existante (entree : ingestion de scanners externes ; sortie : MCP + futurs
+webhooks).
 
 Voir [`openspec/project.md`](openspec/project.md) pour le positionnement
-complet, le modele de menace et la stack figee.
+complet, le modele de menace et la stack figee. Voir
+[`docs/integrations/external-scanners.md`](docs/integrations/external-scanners.md)
+pour pousser des resultats depuis nmap, nuclei et autres scanners tiers.
 
 ## Quickstart (5 minutes)
 
