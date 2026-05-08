@@ -3,6 +3,7 @@
 require_relative "tool_registry"
 require_relative "../agent/hybrid_retriever"
 require_relative "../reconaut/scan_enqueuer"
+require_relative "../reconaut/doctor"
 require_relative "../../use_cases/scopes/operations"
 
 module Mcp
@@ -12,10 +13,13 @@ module Mcp
   #
   # Cf. openspec/changes/init-reconaut-platform/specs/mcp-server/spec.md
   # et tasks.md sections 5.1 / 5.3 (scopes par outil).
+  # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+  # (extension de la surface de tools : system_doctor en v1).
   module CoreTools
     module_function
 
-    def register_all!(retriever:, scope_storage:, scan_enqueuer: nil)
+    def register_all!(retriever:, scope_storage:, scan_enqueuer: nil,
+                      doctor: Reconaut::Doctor, doctor_probes: {}, doctor_env: ENV.to_h)
       ToolRegistry.reset!
 
       # search_hosts : delegue au HybridRetriever, expose les rows + warnings.
@@ -96,6 +100,22 @@ module Mcp
             { ok: false, error: "invalid_payload", message: e.message }
           end
         end
+      end
+
+      # system_doctor : expose le rapport Reconaut::Doctor comme outil
+      # MCP. Permet a la TUI (reconautctl doctor) et aux agents IA
+      # d'auditer la sante d'une instance via le canal canonique MCP,
+      # sans dupliquer la logique du rake task reconaut:doctor.
+      #
+      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+      # (Requirement: MCP Tool Surface, scope read:health).
+      ToolRegistry.register(
+        name:   "system_doctor",
+        scopes: [:"read:health"],
+        params_schema: {}
+      ) do |params:, caller_id:|
+        report = doctor.run(probes: doctor_probes, env: doctor_env)
+        report.to_h
       end
 
       ToolRegistry
