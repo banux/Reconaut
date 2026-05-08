@@ -29,8 +29,12 @@ module Reconaut
         end
       end
 
+      # En mode mono-user (cf. openspec/changes/single-user-only/),
+      # tous les utilisateurs sont l'opérateur unique. La méthode
+      # `role` est conservée pour compat des controllers hérités mais
+      # renvoie toujours `:operator`.
       def role
-        user.role
+        :operator
       end
     end
 

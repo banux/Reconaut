@@ -38,8 +38,7 @@ module Reconaut
         hasher = registry.password_hasher
         user = registry.user_store.create(
           email: email,
-          password_hash: hasher.hash(password),
-          role: :owner
+          password_hash: hasher.hash(password)
         )
         issued = registry.authenticator.issue_api_key(user_id: user.id)
 

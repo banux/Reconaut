@@ -19,11 +19,14 @@ module Scopes
       end
     end
 
-    # Roles autorises a muter le scope. La lecture est autorisee aussi
-    # a viewer (pour que la sidebar de l'UI reste navigable). Seuls
-    # admin/owner mutent.
-    READ_ROLES  = %i[viewer analyst admin owner mcp_client].freeze
-    WRITE_ROLES = %i[admin owner].freeze
+    # En mode mono-user (cf. openspec/changes/single-user-only/), il
+    # n'y a qu'un seul rôle effectif `:operator` qui a tous les droits.
+    # Les anciens rôles (viewer/analyst/admin/owner/mcp_client) sont
+    # conservés transitoirement pour ne pas casser les controllers
+    # hérités qui les passent encore. À retirer dans §2.2 du change
+    # single-user-only quand les use cases perdront caller_role:.
+    READ_ROLES  = %i[operator viewer analyst admin owner mcp_client].freeze
+    WRITE_ROLES = %i[operator admin owner].freeze
 
     class List
       def initialize(storage:)

@@ -15,12 +15,27 @@ module Mcp
   class ToolsController < ApplicationController
     include RoleResolver
 
+    # En mode mono-user (cf. openspec/changes/single-user-only/), tout
+    # opérateur authentifié reçoit le rôle :operator avec un set de
+    # scopes complet (la défense-en-profondeur passe par la limitation
+    # des scopes attachés à chaque clé API, pas par les rôles serveur).
+    # Les anciens rôles restent listés transitoirement pour absorber
+    # les controllers hérités encore non purgés.
+    OPERATOR_SCOPES = [
+      :"read:hosts", :"read:scopes", :"write:scopes",
+      :"read:scans", :"write:scans",
+      :"read:reports", :"agent:chat",
+      :"read:api_keys", :"write:api_keys",
+      :"read:health", :"manage:scopes"
+    ].freeze
+
     SCOPES_BY_ROLE = {
+      operator:   OPERATOR_SCOPES,
       viewer:     [:"read:hosts", :"read:scopes"],
       analyst:    [:"read:hosts", :"read:scopes"],
       mcp_client: [:"read:hosts", :"read:scopes", :"write:scans"],
       admin:      [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes"],
-      owner:      [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes", :"read:reports"]
+      owner:      OPERATOR_SCOPES
     }.freeze
 
     def invoke

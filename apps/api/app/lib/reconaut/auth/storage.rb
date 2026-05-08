@@ -7,11 +7,13 @@ require "time"
 module Reconaut
   module Auth
     # User : compte applicatif local. Persiste un email, un hash de
-    # password (Argon2id), un role RBAC. AUCUN mot de passe en clair
-    # n'est jamais stocke.
+    # password (Argon2id). AUCUN mot de passe en clair n'est jamais
+    # stocke.
     #
-    # Roles cf. RoleResolver : viewer / analyst / admin / owner.
-    User = Struct.new(:id, :email, :password_hash, :role, :created_at, :disabled_at,
+    # En mode mono-user (cf. openspec/changes/single-user-only/), le
+    # champ `role` a ete retire — il y a un seul operateur par
+    # instance, identifie implicitement.
+    User = Struct.new(:id, :email, :password_hash, :created_at, :disabled_at,
                       keyword_init: true) do
       def disabled?
         !disabled_at.nil?
@@ -20,7 +22,7 @@ module Reconaut
       # to_h pour serialisation API : on n'expose JAMAIS le password_hash.
       def to_h
         {
-          id: id, email: email, role: role.to_s,
+          id: id, email: email,
           created_at: created_at, disabled_at: disabled_at
         }
       end
@@ -44,8 +46,6 @@ module Reconaut
       end
     end
 
-    VALID_ROLES = %i[viewer analyst admin owner mcp_client].freeze
-
     # Stockage en memoire (tests + dev local). DB-backed via ActiveRecord
     # quand le modele User sera cree par init-reconaut-platform.
     module Storage
@@ -56,11 +56,13 @@ module Reconaut
           @mutex  = Mutex.new
         end
 
-        def create(email:, password_hash:, role:)
+        # En mode mono-user, `role:` est accepte par tolerance pour les
+        # appelants existants mais ignore (le User n'a plus de role).
+        # Cf. openspec/changes/single-user-only/.
+        def create(email:, password_hash:, role: nil)
+          _ = role # ignore
           email = email.to_s.downcase.strip
-          role  = role.to_sym
           raise ArgumentError, "invalid_email" if email.empty? || !email.include?("@")
-          raise ArgumentError, "invalid_role"  unless VALID_ROLES.include?(role)
 
           @mutex.synchronize do
             raise ArgumentError, "email_taken" if @by_email.key?(email)
@@ -69,7 +71,6 @@ module Reconaut
               id:            SecureRandom.uuid,
               email:         email,
               password_hash: password_hash,
-              role:          role,
               created_at:    Time.now.utc.iso8601,
               disabled_at:   nil
             )
@@ -96,8 +97,15 @@ module Reconaut
             user = @users[id]
             return nil unless user
 
-            disabled = user.dup
-            disabled.disabled_at = Time.now.utc.iso8601
+            # User est immuable (Struct.new keyword_init), on reconstruit
+            # un User avec disabled_at pose au lieu de muter.
+            disabled = User.new(
+              id:            user.id,
+              email:         user.email,
+              password_hash: user.password_hash,
+              created_at:    user.created_at,
+              disabled_at:   Time.now.utc.iso8601
+            )
             @users[id] = disabled
             @by_email[disabled.email] = disabled
             disabled

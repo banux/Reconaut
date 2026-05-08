@@ -8,15 +8,15 @@ RSpec.describe Reconaut::Auth::Bootstrap do
   let(:registry) { Reconaut::Registry.new }
 
   describe ".call" do
-    it "cree le user owner et issue une cle API la premiere fois" do
+    it "cree le user et issue une cle API la premiere fois" do
       result = described_class.call(
         email: "owner@reconaut.local",
         password: "hunter2",
         registry: registry
       )
 
-      expect(result[:user].role).to eq(:owner)
       expect(result[:user].email).to eq("owner@reconaut.local")
+      expect(result[:user]).not_to respond_to(:role) # mono-user
       expect(result[:api_key][:token]).to be_a(String)
       expect(registry.user_store.list.size).to eq(1)
       expect(registry.api_key_store.list_for(result[:user].id).size).to eq(1)
@@ -25,8 +25,7 @@ RSpec.describe Reconaut::Auth::Bootstrap do
     it "leve AlreadyInitializedError si un user existe deja" do
       registry.user_store.create(
         email: "existing@x.y",
-        password_hash: registry.password_hasher.hash("p"),
-        role: :owner
+        password_hash: registry.password_hasher.hash("p")
       )
 
       expect {
@@ -63,7 +62,8 @@ RSpec.describe Reconaut::Auth::Bootstrap do
       identity = registry.authenticator.from_authorization("Bearer #{result[:api_key][:token]}")
       expect(identity).not_to be_nil
       expect(identity.user.id).to eq(result[:user].id)
-      expect(identity.role).to eq(:owner)
+      # Mode mono-user : tout user authentifié a role :operator.
+      expect(identity.role).to eq(:operator)
     end
   end
 end
