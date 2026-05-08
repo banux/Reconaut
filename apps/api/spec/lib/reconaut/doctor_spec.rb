@@ -119,4 +119,100 @@ RSpec.describe Reconaut::Doctor do
     expect(statuses["graph_tier"]).to eq(:fail)
     expect(statuses["graph_role_reader"]).to eq(:fail)
   end
+
+  describe "info checks pour l'acceptance bin/doctor" do
+    it "rails_version : info quand Rails est charge" do
+      report = described_class.run(
+        probes: probes(rails_version: ->(_) { "8.0.1" }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "rails_version" }
+      expect(check.status).to eq(:info)
+      expect(check.details).to eq("8.0.1")
+    end
+
+    it "rails_version : unknown si non determinable" do
+      report = described_class.run(
+        probes: probes(rails_version: ->(_) { nil }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "rails_version" }
+      expect(check.status).to eq(:unknown)
+    end
+
+    it "good_jobs_pending : info avec compteur quand DB live" do
+      report = described_class.run(
+        probes: probes(good_jobs_pending: ->(_) { 7 }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "good_jobs_pending" }
+      expect(check.status).to eq(:info)
+      expect(check.details).to include("7 job(s) en attente")
+    end
+
+    it "good_jobs_pending : unknown sans DB" do
+      report = described_class.run(
+        probes: probes(good_jobs_pending: ->(_) { nil }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "good_jobs_pending" }
+      expect(check.status).to eq(:unknown)
+      # Pas de :fail -> n'altere pas ok global tant qu'AGE / region OK.
+      expect(report.ok).to be true
+    end
+
+    it "schema_versions_rails : info enumerant ScanJobV1, ScanResultV1, HeartbeatV1" do
+      report = described_class.run(
+        probes: probes(schema_versions: ->(_) {
+          { "ScanJobV1" => 1, "ScanResultV1" => 1, "HeartbeatV1" => 1 }
+        }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "schema_versions_rails" }
+      expect(check.status).to eq(:info)
+      expect(check.details).to include("ScanJobV1=v1")
+      expect(check.details).to include("ScanResultV1=v1")
+      expect(check.details).to include("HeartbeatV1=v1")
+    end
+
+    it "schema_versions_rails : unknown si schemas introuvables" do
+      report = described_class.run(
+        probes: probes(schema_versions: ->(_) { nil }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "schema_versions_rails" }
+      expect(check.status).to eq(:unknown)
+    end
+
+    it "last_worker_heartbeat : info avec versions et timestamp" do
+      report = described_class.run(
+        probes: probes(last_worker_heartbeat: ->(_) {
+          { worker_version: "0.1.2", schema_version: 1, seen_at: "2026-05-08T12:00:00Z" }
+        }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "last_worker_heartbeat" }
+      expect(check.status).to eq(:info)
+      expect(check.details).to include("worker_version=0.1.2")
+      expect(check.details).to include("schema_version=1")
+      expect(check.details).to include("seen_at=2026-05-08T12:00:00Z")
+    end
+
+    it "last_worker_heartbeat : unknown quand aucun worker n'a encore reporte" do
+      report = described_class.run(
+        probes: probes(last_worker_heartbeat: ->(_) { nil }),
+        env: {}
+      )
+      check = report.checks.find { |c| c.name == "last_worker_heartbeat" }
+      expect(check.status).to eq(:unknown)
+      expect(check.details).to include("aucune heartbeat")
+    end
+
+    it "report.to_h embarque les nouveaux checks" do
+      report = described_class.run(probes: probes, env: {})
+      names = report.checks.map(&:name)
+      expect(names).to include("rails_version", "good_jobs_pending",
+                               "schema_versions_rails", "last_worker_heartbeat")
+    end
+  end
 end

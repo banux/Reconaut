@@ -45,6 +45,23 @@ namespace :reconaut do
         result.first["can_write"] == "t" || result.first["can_write"] == true
       rescue StandardError
         true
+      },
+      good_jobs_pending: ->(_ctx) {
+        return nil unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
+
+        result = ActiveRecord::Base.connection.execute(
+          "SELECT count(*)::int AS n FROM good_jobs WHERE finished_at IS NULL"
+        )
+        Integer(result.first.fetch("n", 0))
+      rescue StandardError
+        nil
+      },
+      last_worker_heartbeat: ->(_ctx) {
+        # Cote production, l'heartbeat est ecrite par le worker Go
+        # dans une table dediee (a livrer en meme temps que le wiring
+        # main.go). Tant qu'elle n'existe pas, le probe renvoie nil et
+        # le check passe en :unknown.
+        nil
       }
     }
 

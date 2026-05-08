@@ -127,4 +127,22 @@ RSpec.describe JobSchema::Registry do
       expect(ok).to be false
     end
   end
+
+  describe ".schema_version_for / .schema_versions" do
+    it "schema_version_for(\"ScanJobV1\") renvoie la const declaree" do
+      expect(described_class.schema_version_for("ScanJobV1")).to eq(1)
+    end
+
+    it "schema_versions enumere les trois schemas connus avec leurs versions" do
+      versions = described_class.schema_versions
+      expect(versions.keys).to contain_exactly("ScanJobV1", "ScanResultV1", "HeartbeatV1")
+      expect(versions.values).to all(be_an(Integer))
+    end
+
+    it "schema_version_for sur un schema inconnu leve UnknownSchemaError" do
+      expect {
+        described_class.schema_version_for("Unknown")
+      }.to raise_error(JobSchema::UnknownSchemaError)
+    end
+  end
 end
