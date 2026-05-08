@@ -9,6 +9,12 @@ Source de verite specs :
   - Requirement: Scan Workers Runtime
 - `openspec/changes/add-tech-stack/tasks.md` section 6.1
 
+Voir aussi : [`mcp-first.md`](./mcp-first.md) pour comprendre comment
+les outils MCP exposent les operations metier (request_scan,
+list_scans, get_scan_status) au-dessus de cette frontiere — Rails
+enqueue, les workers Go consomment, et l'operateur ou un agent IA
+externe interroge l'etat via les outils MCP.
+
 ## Principes intangibles
 
 1. **Pas d'appel synchrone Rails -> Go.** Aucun HTTP, aucun gRPC, aucun

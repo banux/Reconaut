@@ -26,7 +26,7 @@ Checklist de la bascule SPA Vue → TUI Go + spécialisation des workers de scan
   - **Notes** : Nouveau module Go `apps/tui/` (chemin `github.com/banux/Reconaut/apps/tui`) avec :
     - `cmd/reconautctl/main.go` : entrypoint, parsing des sous-commandes (cobra ou stdlib `flag` + dispatch maison).
     - `internal/tui/` : modèles bubbletea pour les vues interactives (`agent`, `hosts`, `scope`).
-    - `internal/api/` : client HTTP+SSE typé contre l'API Rails (réutilise les schémas de `packages/job-schema/` quand pertinent).
+    - ~~`internal/api/`~~ : remplacé par `internal/mcp/` (client MCP HTTP+SSE) suite au change `mcp-as-primary-entrypoint`. Toute opération métier (scope, scan, hosts, agent, doctor) est une invocation d'outil MCP ; aucun dialecte REST maison.
     - `internal/auth/` : stockage de la clé API (`$XDG_CONFIG_HOME/reconaut/credentials`, mode `0600`).
   - **Test plan** : `cd apps/tui && go test ./...` exécute un smoke test trivial qui passe. `go build ./cmd/reconautctl` produit un binaire exécutable. `reconautctl --version` imprime une version + exit 0.
 
@@ -35,7 +35,7 @@ Checklist de la bascule SPA Vue → TUI Go + spécialisation des workers de scan
   - **Test plan** : Test e2e avec un Rails mock : `reconautctl login` reçoit email/password en mode batch (drapeau `--email`/`--password` pour les tests, refusé en mode interactif standard), assure (a) la requête API est envoyée avec les bons headers, (b) la clé API renvoyée est stockée, (c) le fichier credentials a `0600`, (d) le mot de passe n'apparaît dans aucun fichier disque ou variable d'env exportée.
 
 - [ ] **2.3 Sous-commandes `reconautctl scope list|add|revoke`**
-  - **Notes** : Wrappers HTTP autour de `GET /scopes`, `POST /scopes`, `DELETE /scopes/{id}`. La sortie par défaut est une table (lipgloss/table). Drapeau `--json` pour la sortie machine. Les actions destructrices (`revoke`) demandent confirmation `[y/N]` sauf si `--yes` est passé.
+  - **Notes** : Wrappers MCP autour des outils `list_scopes` / `add_scope` / `revoke_scope` (cf. change `mcp-as-primary-entrypoint`, plus de `GET /scopes` REST). La sortie par défaut est une table (lipgloss/table). Drapeau `--json` pour la sortie machine. Les actions destructrices (`revoke`) demandent confirmation `[y/N]` sauf si `--yes` est passé.
   - **Test plan** : Test fixture-driven avec un serveur HTTP de test : (a) `scope list` rend le tableau attendu, (b) `scope add` envoie le body attendu et imprime le résultat, (c) `scope revoke <id>` sans `--yes` lit stdin et abandonne sur input vide, (d) `scope revoke <id> --yes` envoie `DELETE` directement.
 
 - [ ] **2.4 Sous-commande `reconautctl scan request|status|list`**

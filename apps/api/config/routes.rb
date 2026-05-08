@@ -1,6 +1,11 @@
 Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Healthcheck non authentifié, dédié aux probes (LB, k8s, prometheus
+  # blackbox). Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+  # (Requirement: REST API Reduced to Bootstrap, Health and MCP Transport).
+  get "/healthz", to: "health#show"
+
   # Endpoints consommes par apps/web (cf. apps/web/src/api/).
   post "/agent/chat", to: "agent/chat#create"
 

@@ -7,6 +7,7 @@ require_relative "auth/storage"
 require_relative "auth/authenticator"
 require_relative "auth/password_hasher"
 require_relative "heartbeats"
+require_relative "scans"
 
 # Registry singleton : assemble les dependances que les controllers
 # utilisent (HybridRetriever, ScopeStorage, AuditRecorder, ScanEnqueuer,
@@ -17,7 +18,8 @@ require_relative "heartbeats"
 module Reconaut
   class Registry
     attr_accessor :hybrid_retriever, :scope_storage, :audit_recorder, :job_bus,
-                  :user_store, :api_key_store, :password_hasher, :heartbeat_store
+                  :user_store, :api_key_store, :password_hasher, :heartbeat_store,
+                  :scan_store
 
     def initialize
       @audit_recorder   = ::Agent::AuditRecorder::InMemoryRecorder.new
@@ -27,6 +29,7 @@ module Reconaut
       @user_store       = ::Reconaut::Auth::Storage::InMemoryUsers.new
       @api_key_store    = ::Reconaut::Auth::Storage::InMemoryApiKeys.new
       @heartbeat_store  = ::Reconaut::Heartbeats::InMemoryStore.new
+      @scan_store       = ::Reconaut::Scans::InMemoryStore.new
       # Plain par defaut pour ne pas faire payer Argon2 sur chaque test
       # qui boote la registry. Les specs auth qui veulent le hash reel
       # remplacent password_hasher par PasswordHasher::Argon2id.new.
@@ -34,7 +37,11 @@ module Reconaut
     end
 
     def scan_enqueuer
-      ::Reconaut::ScanEnqueuer.new(scope_storage: scope_storage, job_bus: job_bus)
+      ::Reconaut::ScanEnqueuer.new(
+        scope_storage: scope_storage,
+        job_bus:       job_bus,
+        scan_store:    scan_store
+      )
     end
 
     def authenticator

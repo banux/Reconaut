@@ -110,6 +110,11 @@ Detail complet : [`openspec/project.md`](openspec/project.md).
 
 - [`docs/adr/0001-license.md`](docs/adr/0001-license.md)
   - decision AGPL-3.0-only et alternatives ecartees.
+- [`docs/architecture/mcp-first.md`](docs/architecture/mcp-first.md)
+  - MCP comme canal d'entree principal : pourquoi, controllers REST
+    restants, comment porter une feature en outil MCP.
+- [`docs/architecture/auth-bootstrap.md`](docs/architecture/auth-bootstrap.md)
+  - pourquoi les routes /auth/* restent REST (oeuf et poule de la cle API).
 - [`docs/architecture/graph-templates.md`](docs/architecture/graph-templates.md)
   - comment ajouter un template Cypher au catalogue de l'agent.
 - [`docs/architecture/age-limits.md`](docs/architecture/age-limits.md)

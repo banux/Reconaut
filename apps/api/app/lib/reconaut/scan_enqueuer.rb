@@ -32,9 +32,10 @@ module Reconaut
       def to_h = { scan_id: scan_id, idempotency_key: idempotency_key }
     end
 
-    def initialize(scope_storage:, job_bus:)
+    def initialize(scope_storage:, job_bus:, scan_store: nil)
       @scope_storage = scope_storage
       @job_bus       = job_bus
+      @scan_store    = scan_store
     end
 
     def call(scan_kind:, target_kind:, target_value:, options: {}, requested_at: Time.now.utc)
@@ -42,10 +43,22 @@ module Reconaut
       payload = build_payload(scan_kind, target_kind, target_value, options, requested_at)
       validate_payload!(payload)
 
-      result = @job_bus.enqueue(payload: payload)
+      result   = @job_bus.enqueue(payload: payload)
+      scan_id  = result.fetch(:scan_id)
+      idem_key = payload["idempotency_key"]
+
+      @scan_store&.record!(
+        scan_id:         scan_id,
+        scan_kind:       scan_kind,
+        target_kind:     target_kind,
+        target_value:    target_value,
+        idempotency_key: idem_key,
+        enqueued_at:     requested_at
+      )
+
       Result.new(
-        scan_id:         result.fetch(:scan_id),
-        idempotency_key: payload["idempotency_key"]
+        scan_id:         scan_id,
+        idempotency_key: idem_key
       )
     end
 

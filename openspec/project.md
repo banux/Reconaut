@@ -12,7 +12,7 @@ Reconaut est un **outil open source auto-hébergeable** d'Attack Surface Managem
 
 - **Optimisation des scans pilotée par IA** — planification adaptative pondérée par taux de churn, criticité déclarée par l'opérateur et fraîcheur ; détection d'anomalies sur les profils de services par hôte.
 - **Interface agent conversationnelle** — recherche en langage naturel sur le jeu de données indexé, propulsée par une couche d'embeddings **pluggable** (défaut self-hostable ; Mistral / OpenAI-compatible disponible si l'opérateur le configure).
-- **Serveur MCP** — expose des outils de scan, de recherche et de reporting pour que les agents IA de l'opérateur automatisent les workflows ASM.
+- **Serveur MCP comme point d'entrée principal** — le transport MCP HTTP+SSE intégré au process Rails est le canal opérateur primaire. La TUI `reconautctl`, les agents IA externes et tout client (CI scripts, intégrations) consomment **le même périmètre d'outils MCP** avec la même clé API personnelle. L'API REST se réduit à l'auth bootstrap, au healthcheck et au transport MCP lui-même (cf. change `mcp-as-primary-entrypoint`).
 - **Auto-hébergement sans condition.** Aucune fonctionnalité critique du produit ne dépend d'un service propriétaire externe. Tout ce qui est externe (LLM, IdP) est substituable et l'opérateur peut tourner 100 % en réseau privé.
 
 ## Stack
@@ -24,7 +24,7 @@ Reconaut est un **outil open source auto-hébergeable** d'Attack Surface Managem
 - **Stockage** : Postgres unique avec extensions TimescaleDB (timeseries de scan), pgvector (index sémantique) et Apache AGE (graphe d'actifs). **Pas de stockage objet** : les exports / artefacts vivent en filesystem local (volume monté) ou comme blobs Postgres. Pas de S3, pas de MinIO en v1.
 - **Embeddings** : interface `Embedder` pluggable, **sélection par variable d'environnement**. Implémentations livrées : (a) modèle local in-process (défaut, zéro appel sortant) ; (b) **Ollama** (sidecar local, parle un endpoint REST sur `localhost`/réseau privé — recommandé pour les opérateurs qui veulent isoler le runtime LLM mais rester self-hosted) ; (c) `mistral-embed` (API EU) optionnel ; (d) OpenAI-compatible générique optionnel (couvre par extension tout endpoint qui parle l'API OpenAI). Le modèle concret pour les providers locaux/Ollama est lui aussi configurable par env.
 - **Auth** : **local-first**. Auth locale (utilisateur/mot de passe Argon2id + clés API personnelles hashées) toujours disponible et active par défaut, aucun IdP externe requis pour démarrer. **OIDC** (Keycloak, Authentik, Dex, etc.) activable en parallèle par configuration ; les deux mécanismes coexistent. Panne IdP externe ne bloque pas l'instance.
-- **MCP** : transport HTTP+SSE uniquement (stdio non livré), intégré au process Rails.
+- **MCP** : transport HTTP+SSE uniquement (stdio non livré), intégré au process Rails. **Point d'entrée principal** — la TUI `reconautctl` (cf. `replace-web-with-tui`) consomme MCP pour toutes les opérations métier ; seuls login + génération de clé passent par REST (`/auth/sessions`, `/auth/api_keys`).
 - **Distribution** : images de container OCI multi-arch (amd64, arm64), `docker-compose.yml` de référence, chart Helm, archives source signées par release.
 
 ## Modèle de menace et limites de responsabilité

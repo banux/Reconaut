@@ -5,6 +5,7 @@ require_relative "../agent/hybrid_retriever"
 require_relative "../reconaut/scan_enqueuer"
 require_relative "../reconaut/doctor"
 require_relative "../reconaut/heartbeats"
+require_relative "../reconaut/scans"
 require_relative "../reconaut/ingest_scan_result"
 require_relative "../../use_cases/scopes/operations"
 
@@ -24,7 +25,8 @@ module Mcp
                       doctor: Reconaut::Doctor, doctor_probes: {}, doctor_env: ENV.to_h,
                       api_key_storage: nil,
                       ingestion_recorder: nil,
-                      heartbeat_store: nil)
+                      heartbeat_store: nil,
+                      scan_store: nil)
       ToolRegistry.reset!
 
       # search_hosts : delegue au HybridRetriever, expose les rows + warnings.
@@ -168,6 +170,67 @@ module Mcp
             { ok: false, error: "invalid_payload", message: e.message }
           end
         end
+      end
+
+      # list_scans : liste les scans connus (du plus récent au plus
+      # ancien) avec leur status courant. Lecture seule.
+      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+      # (Requirement: MCP Tool Surface, scope read:scans).
+      if scan_store
+        ToolRegistry.register(
+          name:   "list_scans",
+          scopes: [:"read:scans"],
+          params_schema: {
+            limit: { type: :integer, required: false, default: 50, min: 1, max: 200 }
+          }
+        ) do |params:, caller_id:|
+          records = scan_store.list(limit: params[:limit])
+          { scans: records.map(&:to_h) }
+        end
+
+        # get_scan_status : lookup ponctuel par scan_id. Renvoie
+        # `{ found: false }` quand le scan n'existe pas (ou plus, si on
+        # ajoute de la TTL plus tard).
+        ToolRegistry.register(
+          name:   "get_scan_status",
+          scopes: [:"read:scans"],
+          params_schema: {
+            scan_id: { type: :string, min_length: 1, max_length: 64 }
+          }
+        ) do |params:, caller_id:|
+          record = scan_store.find(params[:scan_id])
+          if record.nil?
+            { found: false, scan_id: params[:scan_id] }
+          else
+            { found: true, scan: record.to_h }
+          end
+        end
+      end
+
+      # agent_chat : delegue au pipeline HybridRetriever et renvoie une
+      # reponse synchrone (rows + citations). Le streaming via
+      # tool_result partiels SSE est gere cote controller (cf. §1.2),
+      # mais l'outil expose deja la sémantique : un appel = une
+      # reponse complete avec citations (host_id, scanned_at).
+      #
+      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+      # (Requirement: MCP Tool Surface, scope agent:chat).
+      ToolRegistry.register(
+        name:   "agent_chat",
+        scopes: [:"agent:chat"],
+        params_schema: {
+          prompt:  { type: :string, min_length: 1, max_length: 4000 },
+          context: { type: :hash, required: false, default: {} }
+        }
+      ) do |params:, caller_id:|
+        response = retriever.call(params[:prompt])
+        {
+          rows:           response.rows,
+          citations:      response.citations.map(&:to_h),
+          warnings:       response.warnings,
+          retrieval_path: response.retrieval_path,
+          duration_ms:    response.duration_ms
+        }
       end
 
       # ingest_scan_result : surface d'integration entrante. Accepte

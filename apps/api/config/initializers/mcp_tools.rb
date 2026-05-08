@@ -31,7 +31,8 @@ Rails.application.config.after_initialize do
     scan_enqueuer:      registry.scan_enqueuer,
     api_key_storage:    registry.api_key_store,
     ingestion_recorder: nil, # à câbler quand le ScanResultIngestor sera livré
-    heartbeat_store:    registry.heartbeat_store
+    heartbeat_store:    registry.heartbeat_store,
+    scan_store:         registry.scan_store
   )
 
   Rails.logger.info "[mcp] tools registered: #{Mcp::ToolRegistry.names.join(", ")}"
