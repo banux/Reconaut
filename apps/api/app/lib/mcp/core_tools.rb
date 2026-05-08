@@ -142,7 +142,7 @@ module Mcp
           name:   "request_scan",
           scopes: [:"write:scans"],
           params_schema: {
-            scan_kind:    { type: :enum, values: %w[tcp_probe tls_capture http_banner subdomain_enum service_fingerprint] },
+            scan_kind:    { type: :enum, values: %w[tcp_probe tls_capture http_banner subdomain_enum service_fingerprint dns_records] },
             target_kind:  { type: :enum, values: %w[ip cidr domain host] },
             target_value: { type: :string, min_length: 1, max_length: 255 }
           }
@@ -154,6 +154,8 @@ module Mcp
               target_value: params[:target_value]
             )
             { ok: true, scan_id: result.scan_id, idempotency_key: result.idempotency_key }
+          rescue Reconaut::ScanEnqueuer::InvalidTargetError => e
+            { ok: false, error: "invalid_target", message: e.message }
           rescue Reconaut::ScanEnqueuer::OutOfScopeError => e
             { ok: false, error: "out-of-scope", message: e.message }
           rescue Reconaut::ScanEnqueuer::InvalidPayloadError => e

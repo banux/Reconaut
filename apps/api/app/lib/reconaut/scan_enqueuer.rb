@@ -25,8 +25,17 @@ module Reconaut
   class ScanEnqueuer
     class OutOfScopeError < StandardError; end
     class InvalidPayloadError < StandardError; end
+    class InvalidTargetError < StandardError; end
 
     SUPPORTED_KINDS = %w[ip cidr domain host].freeze
+
+    # Contraintes par scan_kind : certains scanners n'acceptent qu'un
+    # sous-ensemble de target_kind. dns_records (cf. add-dns-records-scanner)
+    # n'a de sens que sur un domaine ou un host — résoudre les records
+    # DNS d'une IP ou d'un CIDR n'a pas de sens.
+    SCAN_KIND_TARGET_CONSTRAINTS = {
+      "dns_records" => %w[domain host].freeze
+    }.freeze
 
     Result = Struct.new(:scan_id, :idempotency_key, keyword_init: true) do
       def to_h = { scan_id: scan_id, idempotency_key: idempotency_key }
@@ -39,6 +48,7 @@ module Reconaut
     end
 
     def call(scan_kind:, target_kind:, target_value:, options: {}, requested_at: Time.now.utc)
+      ensure_target_kind_allowed!(scan_kind, target_kind)
       ensure_in_scope!(target_kind, target_value)
       payload = build_payload(scan_kind, target_kind, target_value, options, requested_at)
       validate_payload!(payload)
@@ -60,6 +70,19 @@ module Reconaut
         scan_id:         scan_id,
         idempotency_key: idem_key
       )
+    end
+
+    # Vérifie qu'un scan_kind avec contraintes spécifiques sur le
+    # target_kind respecte ces contraintes. Cf.
+    # SCAN_KIND_TARGET_CONSTRAINTS et openspec/changes/add-dns-records-scanner/.
+    def ensure_target_kind_allowed!(scan_kind, target_kind)
+      allowed = SCAN_KIND_TARGET_CONSTRAINTS[scan_kind.to_s]
+      return if allowed.nil? # pas de contrainte, on accepte tous les target_kind valides du schema
+
+      return if allowed.include?(target_kind.to_s)
+
+      raise InvalidTargetError,
+            "#{scan_kind} requires target_kind in {#{allowed.join(', ')}}, got #{target_kind}"
     end
 
     # Scope check : la cible DOIT correspondre a au moins un scope

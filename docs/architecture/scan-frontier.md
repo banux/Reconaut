@@ -15,6 +15,22 @@ list_scans, get_scan_status) au-dessus de cette frontiere — Rails
 enqueue, les workers Go consomment, et l'operateur ou un agent IA
 externe interroge l'etat via les outils MCP.
 
+## scan_kind couverts en v1
+
+| `scan_kind`           | Binaire                                          | Queue GoodJob              | Cible(s) acceptee(s)        |
+|-----------------------|--------------------------------------------------|----------------------------|-----------------------------|
+| `tcp_probe`           | `apps/scanner/cmd/scanner-tcp_probe/`            | `scan:tcp_probe`           | `ip`, `cidr`, `host`        |
+| `tls_capture`         | `apps/scanner/cmd/scanner-tls_capture/`          | `scan:tls_capture`         | `ip`, `host`, `domain`      |
+| `http_banner`         | `apps/scanner/cmd/scanner-http_banner/`          | `scan:http_banner`         | `ip`, `host`, `domain`      |
+| `subdomain_enum`      | `apps/scanner/cmd/scanner-subdomain_enum/`       | `scan:subdomain_enum`      | `domain`                    |
+| `service_fingerprint` | `apps/scanner/cmd/scanner-service_fingerprint/`  | `scan:service_fingerprint` | `ip`, `host`                |
+| `dns_records`         | `apps/scanner/cmd/scanner-dns_records/`          | `scan:dns_records`         | `domain`, `host`            |
+
+`dns_records` (cf. change [`add-dns-records-scanner`](../../openspec/changes/add-dns-records-scanner/proposal.md))
+resout les enregistrements DNS publics (A, AAAA, MX, NS, TXT, CAA,
+SOA, CNAME) d'un domaine couvert par le scope. Pas d'AXFR. Resolveur
+configurable via `RECONAUT_DNS_RESOLVER`.
+
 ## Principes intangibles
 
 1. **Pas d'appel synchrone Rails -> Go.** Aucun HTTP, aucun gRPC, aucun

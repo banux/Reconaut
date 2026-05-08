@@ -16,6 +16,10 @@ Le payload est ensuite envoyé via MCP HTTP+SSE en invoquant l'outil `ingest_sca
 - L'`idempotency_key` du payload sert à dédupliquer les réinjections : un même `idempotency_key` rejoué retourne `outcome: "duplicate"` sans réécriture.
 - Le champ optionnel `source` distingue l'origine (`"nmap"`, `"nuclei"`, etc.). Sans valeur, il est défaulté à `"external"`.
 
+### Cas particulier : DNS records depuis dig / cli maison
+
+Un opérateur qui exécute `dig` (ou un wrapper Python autour de `dnspython`) peut formater le résultat comme un `ScanResultV1` avec `scan_kind="dns_records"` et `findings` typés `dns_record`. C'est exactement le même format que celui émis par le binaire interne `scanner-dns_records` (cf. change [`add-dns-records-scanner`](../../openspec/changes/add-dns-records-scanner/proposal.md)) — la couche d'ingestion `Reconaut::ScanResultIngestor` ne distingue pas l'origine, seul le champ `source` change (`"internal"` vs `"dig"` / `"dnspython"` / etc.).
+
 ## Exemple : pousser un résultat nmap minimal
 
 Supposons qu'un script wrapper a parsé une sortie nmap et construit le payload `ScanResultV1` suivant :

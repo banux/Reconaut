@@ -40,7 +40,7 @@ if [[ ! -d apps/scanner/cmd ]]; then
   exit 0
 fi
 
-EXPECTED_KINDS=(tcp_probe tls_capture http_banner subdomain_enum service_fingerprint)
+EXPECTED_KINDS=(tcp_probe tls_capture http_banner subdomain_enum service_fingerprint dns_records)
 
 for kind in "${EXPECTED_KINDS[@]}"; do
   main="apps/scanner/cmd/scanner-${kind}/main.go"

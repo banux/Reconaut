@@ -66,6 +66,23 @@ func TestValidateScanJobV1_RejectsUnknownScanKind(t *testing.T) {
 	}
 }
 
+// Cf. openspec/changes/add-dns-records-scanner/specs/architecture/spec.md.
+func TestValidateScanJobV1_AcceptsDNSRecords(t *testing.T) {
+	var payload map[string]any
+	_ = json.Unmarshal(validScanJob(t), &payload)
+	payload["scan_kind"] = "dns_records"
+	payload["target"] = map[string]any{"kind": "domain", "value": "example.fr"}
+	bytes, _ := json.Marshal(payload)
+
+	errs, err := Validate(NameScanJobV1, bytes)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Fatalf("dns_records should be a valid scan_kind, got errs=%v", errs)
+	}
+}
+
 func TestValidateScanJobV1_RejectsExtraField(t *testing.T) {
 	var payload map[string]any
 	_ = json.Unmarshal(validScanJob(t), &payload)

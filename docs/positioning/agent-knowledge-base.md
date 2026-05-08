@@ -32,10 +32,10 @@ L'opérateur déclare son périmètre (CIDR, domaines, hôtes) via le tool MCP `
 
 Reconaut alimente le graphe via deux chemins équivalents :
 
-| Chemin              | Tool MCP          | Source                                    |
-|---------------------|-------------------|-------------------------------------------|
-| **Scan interne**    | `request_scan`    | Workers Go (`apps/scanner-<kind>/`)       |
-| **Ingestion externe** | `ingest_scan_result` | Wrapper externe qui produit `ScanResultV1` |
+| Chemin              | Tool MCP          | Source                                                                                                |
+|---------------------|-------------------|-------------------------------------------------------------------------------------------------------|
+| **Scan interne**    | `request_scan`    | Workers Go (`apps/scanner/cmd/scanner-<kind>/`) — TCP, TLS, HTTP, subdomains, services, **DNS records** (A/AAAA/MX/NS/TXT/CAA/SOA/CNAME via `scanner-dns_records`, cf. change `add-dns-records-scanner`) |
+| **Ingestion externe** | `ingest_scan_result` | Wrapper externe qui produit `ScanResultV1`                                                       |
 
 Les deux chemins partagent le **même schéma de payload** (`ScanResultV1`, cf. `packages/job-schema/scan_result_v1.json`) et la **même couche d'ingestion** (`Reconaut::ScanResultIngestor`). Les rows portent un attribut `source` qui distingue l'origine (`internal`, `nmap`, `nuclei`, etc.) — un même hôte vu par plusieurs sources se matérialise avec une liste `sources`.
 

@@ -45,6 +45,10 @@ type Config struct {
 	IdleBackoff time.Duration
 	// Args : os.Args[1:] (utile pour les tests qui veulent forcer --dry-run).
 	Args []string
+	// HandlerOptions : options injectables pour le handler (DNSProber,
+	// Clock, …). Le binaire scanner-dns_records y injecte un
+	// DNSProber backé par dnsprobe.
+	HandlerOptions scanhandler.Options
 }
 
 // Run est l'entrypoint. Renvoie un exit code (à passer à os.Exit côté
@@ -88,7 +92,7 @@ func Run(cfg Config) int {
 	}
 	defer closeFn()
 
-	handler := scanhandler.New(resStore, time.Now)
+	handler := scanhandler.NewWithOptions(resStore, cfg.HandlerOptions)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

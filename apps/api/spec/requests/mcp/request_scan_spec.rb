@@ -151,6 +151,89 @@ RSpec.describe "MCP request_scan", type: :request do
     end
   end
 
+  describe "dns_records (cf. add-dns-records-scanner)" do
+    it "happy path : domaine dans le scope -> ok=true" do
+      storage.create(kind: "domain", value: "example.fr")
+
+      post "/mcp/tools/request_scan",
+        params:  {
+          scan_kind:    "dns_records",
+          target_kind:  "domain",
+          target_value: "example.fr"
+        }.to_json,
+        headers: { "Content-Type" => "application/json" }
+
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body, symbolize_names: true)
+      expect(body[:result][:ok]).to be true
+      expect(body[:result][:scan_id]).to be_a(String)
+    end
+
+    it "rejette target_kind=ip avec invalid_target" do
+      storage.create(kind: "ip", value: "192.0.2.1")
+
+      post "/mcp/tools/request_scan",
+        params:  {
+          scan_kind:    "dns_records",
+          target_kind:  "ip",
+          target_value: "192.0.2.1"
+        }.to_json,
+        headers: { "Content-Type" => "application/json" }
+
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body, symbolize_names: true)
+      expect(body[:result][:ok]).to be false
+      expect(body[:result][:error]).to eq("invalid_target")
+      expect(body[:result][:message]).to include("dns_records").and include("domain, host")
+    end
+
+    it "rejette target_kind=cidr avec invalid_target" do
+      storage.create(kind: "cidr", value: "192.0.2.0/24")
+
+      post "/mcp/tools/request_scan",
+        params:  {
+          scan_kind:    "dns_records",
+          target_kind:  "cidr",
+          target_value: "192.0.2.0/24"
+        }.to_json,
+        headers: { "Content-Type" => "application/json" }
+
+      body = JSON.parse(response.body, symbolize_names: true)
+      expect(body[:result][:ok]).to be false
+      expect(body[:result][:error]).to eq("invalid_target")
+    end
+
+    it "happy path : target_kind=host accepté" do
+      storage.create(kind: "host", value: "mail.example.fr")
+
+      post "/mcp/tools/request_scan",
+        params:  {
+          scan_kind:    "dns_records",
+          target_kind:  "host",
+          target_value: "mail.example.fr"
+        }.to_json,
+        headers: { "Content-Type" => "application/json" }
+
+      body = JSON.parse(response.body, symbolize_names: true)
+      expect(body[:result][:ok]).to be true
+    end
+
+    it "domaine hors scope rejeté avec out-of-scope (avant invalid_target)" do
+      # scope vide ; même un target_kind valide (domain) tombe sur out-of-scope
+      post "/mcp/tools/request_scan",
+        params:  {
+          scan_kind:    "dns_records",
+          target_kind:  "domain",
+          target_value: "example.fr"
+        }.to_json,
+        headers: { "Content-Type" => "application/json" }
+
+      body = JSON.parse(response.body, symbolize_names: true)
+      expect(body[:result][:ok]).to be false
+      expect(body[:result][:error]).to eq("out-of-scope")
+    end
+  end
+
   describe "latence" do
     before { storage.create(kind: "ip", value: "192.0.2.1") }
 

@@ -30,7 +30,8 @@
         "tls_capture",
         "http_banner",
         "subdomain_enum",
-        "service_fingerprint"
+        "service_fingerprint",
+        "dns_records"
       ]
     },
     "target": {

@@ -57,6 +57,16 @@ RSpec.describe JobSchema::Registry do
       expect(ok).to be false
     end
 
+    it "accepte scan_kind=dns_records (cf. add-dns-records-scanner §1.1)" do
+      payload = valid_payload.merge(
+        "scan_kind" => "dns_records",
+        "target"    => { "kind" => "domain", "value" => "example.fr" }
+      )
+      ok, errors = described_class.validate("ScanJobV1", payload)
+      expect(errors).to be_empty
+      expect(ok).to be true
+    end
+
     it "rejette un target.kind inconnu" do
       payload = valid_payload.merge("target" => { "kind" => "person", "value" => "alice" })
       ok, errors = described_class.validate("ScanJobV1", payload)
