@@ -19,7 +19,8 @@ module Mcp
     module_function
 
     def register_all!(retriever:, scope_storage:, scan_enqueuer: nil,
-                      doctor: Reconaut::Doctor, doctor_probes: {}, doctor_env: ENV.to_h)
+                      doctor: Reconaut::Doctor, doctor_probes: {}, doctor_env: ENV.to_h,
+                      user_storage: nil, api_key_storage: nil)
       ToolRegistry.reset!
 
       # search_hosts : delegue au HybridRetriever, expose les rows + warnings.
@@ -179,6 +180,56 @@ module Mcp
       ) do |params:, caller_id:|
         report = doctor.run(probes: doctor_probes, env: doctor_env)
         report.to_h
+      end
+
+      # Admin tools : list_users, list_api_keys, revoke_api_key. Ces
+      # outils requierent les storages auth correspondants. S'ils ne
+      # sont pas injectes, on saute l'enregistrement (utile pour les
+      # tests qui ne touchent pas a l'auth).
+      #
+      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+      # (matrice : read:users / read:api_keys / write:api_keys).
+      if user_storage
+        ToolRegistry.register(
+          name:   "list_users",
+          scopes: [:"read:users"],
+          params_schema: {}
+        ) do |params:, caller_id:|
+          { users: user_storage.list.map(&:to_h) }
+        end
+      end
+
+      if api_key_storage
+        ToolRegistry.register(
+          name:   "list_api_keys",
+          scopes: [:"read:api_keys"],
+          params_schema: {
+            user_id: { type: :string, required: false, default: nil, min_length: 1, max_length: 64 }
+          }
+        ) do |params:, caller_id:|
+          uid = params[:user_id]
+          # Quand user_id est nil et que le storage n'expose qu'un
+          # filtre par user_id, on remonte les cles du caller pour
+          # eviter un dump global non-souhaite. La v1 suit cette
+          # convention defensive : pas de user_id => caller_id.
+          target = uid.to_s.empty? ? caller_id : uid
+          { user_id: target, api_keys: api_key_storage.list_for(target).map(&:to_h) }
+        end
+
+        ToolRegistry.register(
+          name:   "revoke_api_key",
+          scopes: [:"write:api_keys"],
+          params_schema: {
+            id: { type: :string, min_length: 1, max_length: 64 }
+          }
+        ) do |params:, caller_id:|
+          revoked = api_key_storage.revoke!(params[:id])
+          if revoked.nil?
+            { ok: false, error: "api_key_not_found", id: params[:id] }
+          else
+            { ok: true, api_key: revoked.to_h }
+          end
+        end
       end
 
       ToolRegistry
