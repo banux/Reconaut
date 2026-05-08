@@ -146,6 +146,13 @@ module Reconaut
           @mutex.synchronize { @keys.values.select { |k| k.user_id == user_id }.map(&:dup) }
         end
 
+        # En mode mono-user (single-user-only), le filtrage par user_id
+        # n'a plus de sens — toutes les cles appartiennent au meme
+        # operateur unique. `list` renvoie l'ensemble.
+        def list
+          @mutex.synchronize { @keys.values.map(&:dup) }
+        end
+
         def revoke!(id)
           @mutex.synchronize do
             key = @keys[id]
