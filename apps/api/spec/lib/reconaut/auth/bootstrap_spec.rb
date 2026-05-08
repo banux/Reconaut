@@ -33,10 +33,14 @@ RSpec.describe Reconaut::Auth::Bootstrap do
       }.to raise_error(described_class::AlreadyInitializedError)
     end
 
-    it "leve MissingCredentialsError si email vide" do
-      expect {
-        described_class.call(email: "  ", password: "p", registry: registry)
-      }.to raise_error(described_class::MissingCredentialsError)
+    it "email vide est coerce vers DEFAULT_OPERATOR_EMAIL (mono-user)" do
+      result = described_class.call(email: "  ", password: "p", registry: registry)
+      expect(result[:user].email).to eq(described_class::DEFAULT_OPERATOR_EMAIL)
+    end
+
+    it "email omis utilise DEFAULT_OPERATOR_EMAIL" do
+      result = described_class.call(password: "p", registry: registry)
+      expect(result[:user].email).to eq(described_class::DEFAULT_OPERATOR_EMAIL)
     end
 
     it "leve MissingCredentialsError si password vide" do

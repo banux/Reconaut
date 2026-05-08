@@ -27,11 +27,10 @@ bin/setup
 (cd apps/api && bundle install)
 (cd apps/web && npm install)
 
-# 3. Creer le compte owner initial. Idempotent : refuse si un user
-#    existe deja.
-RECONAUT_BOOTSTRAP_OWNER_EMAIL=owner@example.com \
-RECONAUT_BOOTSTRAP_OWNER_PASSWORD='changez-moi' \
-  (cd apps/api && bundle exec rails reconaut:bootstrap_owner)
+# 3. Poser le password de l'opérateur unique (mono-user). Idempotent :
+#    refuse si un user existe déjà.
+RECONAUT_OPERATOR_PASSWORD='changez-moi' \
+  (cd apps/api && bundle exec rails reconaut:set_password)
 # -> imprime { user, api_key } : NOTEZ l'api_key.token, plus jamais consultable.
 
 # 4. Lancer Rails en API.

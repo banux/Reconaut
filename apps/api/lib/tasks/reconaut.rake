@@ -70,16 +70,49 @@ namespace :reconaut do
     exit report.exit_code
   end
 
-  desc "Bootstrap : cree le compte owner initial. Idempotent (refuse si un user existe deja). " \
-       "Lit RECONAUT_BOOTSTRAP_OWNER_EMAIL et RECONAUT_BOOTSTRAP_OWNER_PASSWORD."
+  desc "Pose le password de l'opérateur unique. Idempotent : refuse si un user existe deja. " \
+       "Lit RECONAUT_OPERATOR_PASSWORD (et RECONAUT_OPERATOR_EMAIL en option, défaut 'operator@local')."
+  task set_password: :environment do
+    require "reconaut/auth/bootstrap"
+
+    email    = ENV["RECONAUT_OPERATOR_EMAIL"].to_s.strip
+    password = ENV["RECONAUT_OPERATOR_PASSWORD"].to_s
+
+    if password.empty?
+      warn "RECONAUT_OPERATOR_PASSWORD required"
+      exit 64 # EX_USAGE
+    end
+
+    email = Reconaut::Auth::Bootstrap::DEFAULT_OPERATOR_EMAIL if email.empty?
+
+    begin
+      result = Reconaut::Auth::Bootstrap.call(email: email, password: password)
+    rescue Reconaut::Auth::Bootstrap::AlreadyInitializedError => e
+      warn "bootstrap-already-initialized: #{e.message}"
+      exit 65 # EX_DATAERR
+    end
+
+    payload = {
+      user:    result[:user].to_h,
+      api_key: result[:api_key]
+    }
+    puts JSON.pretty_generate(payload)
+    warn "WARNING: l'API key affichee ci-dessus n'est plus consultable. " \
+         "Stockez-la maintenant, sinon il faudra en generer une autre."
+  end
+
+  # Alias retro-compat : bootstrap_owner reste utilisable et delegue
+  # au nouveau set_password en mappant les anciennes variables d'env.
+  desc "[deprecated] Alias de set_password. Utilise les nouvelles variables " \
+       "RECONAUT_OPERATOR_EMAIL et RECONAUT_OPERATOR_PASSWORD."
   task bootstrap_owner: :environment do
     require "reconaut/auth/bootstrap"
 
-    email    = ENV["RECONAUT_BOOTSTRAP_OWNER_EMAIL"].to_s.strip
-    password = ENV["RECONAUT_BOOTSTRAP_OWNER_PASSWORD"].to_s
+    email    = (ENV["RECONAUT_OPERATOR_EMAIL"] || ENV["RECONAUT_BOOTSTRAP_OWNER_EMAIL"]).to_s.strip
+    password = (ENV["RECONAUT_OPERATOR_PASSWORD"] || ENV["RECONAUT_BOOTSTRAP_OWNER_PASSWORD"]).to_s
 
-    if email.empty? || password.empty?
-      warn "RECONAUT_BOOTSTRAP_OWNER_EMAIL and RECONAUT_BOOTSTRAP_OWNER_PASSWORD required"
+    if password.empty?
+      warn "RECONAUT_OPERATOR_PASSWORD (or legacy RECONAUT_BOOTSTRAP_OWNER_PASSWORD) required"
       exit 64 # EX_USAGE
     end
 
