@@ -121,10 +121,15 @@ class CreateGraphLabelsAndIndexes < ActiveRecord::Migration[8.1]
   def ensure_index(label, property)
     index_name = "idx_#{GRAPH_NAME}_#{label.downcase}_#{property}"
     table_name = %("#{GRAPH_NAME}"."#{label}")
+    # AGE stocke `properties` en agtype (pas JSONB). L'opérateur `->>`
+    # attend un agtype text (chaîne entre double quotes JSON-style)
+    # et non un littéral Postgres simple ; sans ça PG rejette avec
+    # "invalid input syntax for type agtype". Cf.
+    # https://age.apache.org/age-manual/master/intro/agtype.html
     execute <<~SQL
       CREATE INDEX IF NOT EXISTS #{index_name}
         ON #{table_name}
-        USING btree (((properties->>'#{property}')));
+        USING btree (((properties->>'"#{property}"')));
     SQL
   end
 

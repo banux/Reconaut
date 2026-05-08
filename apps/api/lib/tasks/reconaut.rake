@@ -21,50 +21,58 @@ namespace :reconaut do
 
     probes = {
       age_loaded?: ->(_ctx) {
-        return false unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
+        begin
+          return false unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
 
-        result = ActiveRecord::Base.connection.execute(
-          "SELECT count(*) AS n FROM pg_extension WHERE extname = 'age'"
-        )
-        Integer(result.first.fetch("n", 0)) > 0
-      rescue StandardError
-        false
+          result = ActiveRecord::Base.connection.execute(
+            "SELECT count(*) AS n FROM pg_extension WHERE extname = 'age'"
+          )
+          Integer(result.first.fetch("n", 0)) > 0
+        rescue StandardError
+          false
+        end
       },
       region: ->(_ctx) { ENV["RECONAUT_REGION"] },
       graph_lag_p95: ->(_ctx) {
         ENV["RECONAUT_GRAPH_LAG_P95_SECONDS"]&.then { |v| Float(v) rescue nil }
       },
       graph_role_can_write?: ->(_ctx) {
-        return true unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
-        # Heuristique : on regarde si le rôle courant a INSERT sur les
-        # tables AGE du schema "reconaut". S'il en a, c'est qu'on
-        # n'utilise pas le reader -> fail.
-        result = ActiveRecord::Base.connection.execute(
-          "SELECT has_schema_privilege(current_user, 'reconaut', 'CREATE') AS can_write"
-        )
-        result.first["can_write"] == "t" || result.first["can_write"] == true
-      rescue StandardError
-        true
+        begin
+          return true unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
+          # Heuristique : on regarde si le rôle courant a INSERT sur les
+          # tables AGE du schema "reconaut". S'il en a, c'est qu'on
+          # n'utilise pas le reader -> fail.
+          result = ActiveRecord::Base.connection.execute(
+            "SELECT has_schema_privilege(current_user, 'reconaut', 'CREATE') AS can_write"
+          )
+          result.first["can_write"] == "t" || result.first["can_write"] == true
+        rescue StandardError
+          true
+        end
       },
       good_jobs_pending: ->(_ctx) {
-        return nil unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
+        begin
+          return nil unless defined?(ActiveRecord::Base) && ActiveRecord::Base.connected?
 
-        result = ActiveRecord::Base.connection.execute(
-          "SELECT count(*)::int AS n FROM good_jobs WHERE finished_at IS NULL"
-        )
-        Integer(result.first.fetch("n", 0))
-      rescue StandardError
-        nil
+          result = ActiveRecord::Base.connection.execute(
+            "SELECT count(*)::int AS n FROM good_jobs WHERE finished_at IS NULL"
+          )
+          Integer(result.first.fetch("n", 0))
+        rescue StandardError
+          nil
+        end
       },
       last_worker_heartbeat: ->(_ctx) {
         # Lit le dernier heartbeat reçu via le tool MCP submit_heartbeat
         # (cf. add-tech-stack §6 + reconaut/heartbeats.rb). Si aucun
         # worker ne s'est encore annoncé, renvoie nil et le probe passe
         # en :unknown.
-        latest = Reconaut::Registry.default.heartbeat_store.latest
-        latest&.to_h
-      rescue StandardError
-        nil
+        begin
+          latest = Reconaut::Registry.default.heartbeat_store.latest
+          latest&.to_h
+        rescue StandardError
+          nil
+        end
       }
     }
 
