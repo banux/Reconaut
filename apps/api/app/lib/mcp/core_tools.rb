@@ -4,6 +4,7 @@ require_relative "tool_registry"
 require_relative "../agent/hybrid_retriever"
 require_relative "../reconaut/scan_enqueuer"
 require_relative "../reconaut/doctor"
+require_relative "../reconaut/heartbeats"
 require_relative "../reconaut/ingest_scan_result"
 require_relative "../../use_cases/scopes/operations"
 
@@ -22,7 +23,8 @@ module Mcp
     def register_all!(retriever:, scope_storage:, scan_enqueuer: nil,
                       doctor: Reconaut::Doctor, doctor_probes: {}, doctor_env: ENV.to_h,
                       api_key_storage: nil,
-                      ingestion_recorder: nil)
+                      ingestion_recorder: nil,
+                      heartbeat_store: nil)
       ToolRegistry.reset!
 
       # search_hosts : delegue au HybridRetriever, expose les rows + warnings.
@@ -203,6 +205,29 @@ module Mcp
       ) do |params:, caller_id:|
         report = doctor.run(probes: doctor_probes, env: doctor_env)
         report.to_h
+      end
+
+      # submit_heartbeat : reçoit un payload HeartbeatV1 émis par un
+      # worker Go. Validé contre le schema canonique. Le résultat
+      # alimente le probe Doctor `last_worker_heartbeat`.
+      # Cf. openspec/changes/add-tech-stack/tasks.md section 6.
+      if heartbeat_store
+        ToolRegistry.register(
+          name:   "submit_heartbeat",
+          scopes: [:"write:heartbeats"],
+          params_schema: {
+            payload: { type: :hash }
+          }
+        ) do |params:, caller_id:|
+          payload = params[:payload]
+          ok, errors = JobSchema::Registry.validate("HeartbeatV1", payload)
+          if ok
+            record = heartbeat_store.record!(payload)
+            { ok: true, recorded: record.to_h }
+          else
+            { ok: false, error: "invalid_payload", errors: errors }
+          end
+        end
       end
 
       # API key tools : list_api_keys et revoke_api_key. En mode
