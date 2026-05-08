@@ -2,10 +2,14 @@
 
 require_relative "../use_cases/scopes/operations"
 
-# Controller fin : delegue toute la logique aux use cases Scopes::UseCases.
+# DEPRECATED : controller REST historique, sera retiré dans le futur
+# change `remove-rest-wrappers` une fois la TUI migrée sur MCP.
+# Toute nouvelle feature de gestion de scope DOIT s'exposer comme outil
+# MCP (cf. add_scope / revoke_scope / list_scopes dans
+# Mcp::CoreTools), pas étendre ce controller.
 #
-# Cf. apps/web/src/api/scopes.js (consommateur)
-# et init-reconaut-platform/tasks.md section 2.4.
+# Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+# (Requirement: REST API Reduced to Bootstrap, Health and MCP Transport).
 class ScopesController < ApplicationController
   include RoleResolver
 

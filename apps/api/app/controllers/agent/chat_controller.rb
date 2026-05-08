@@ -3,10 +3,11 @@
 require_relative "../../use_cases/agent/handle_query"
 
 module Agent
-  # Controller fin : delegue toute la logique a Agent::UseCases::HandleQuery.
-  #
-  # Cf. apps/web/src/api/agent.js (consommateur)
-  # et init-reconaut-platform/specs/agent-interface/spec.md.
+  # DEPRECATED : controller REST historique, sera retiré dans le futur
+  # change `remove-rest-wrappers` une fois la TUI migrée sur MCP. Le
+  # canal canonique pour invoquer l'agent conversationnel est le tool
+  # MCP `agent_chat` (streaming via tool_result partiels HTTP+SSE),
+  # cf. mcp-as-primary-entrypoint §1.2.
   #
   # Le pipeline reel (HybridRetriever) est resolu au runtime via
   # Reconaut::Registry.default.hybrid_retriever. Quand il est nil
