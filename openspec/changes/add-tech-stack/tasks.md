@@ -75,7 +75,7 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 
 ## 5. Worker Go de référence (squelette) — spec : `architecture`
 
-- [ ] **5.1 Squelette de worker consommant GoodJob et persistant un résultat**
+- [x] **5.1 Squelette de worker consommant GoodJob et persistant un résultat**
   - **Notes** : Package Go `cmd/scanner-worker` qui (a) ouvre une connexion `pgx` au cluster Postgres, (b) loop `SELECT ... FROM good_jobs WHERE finished_at IS NULL AND queue_name = 'scan' FOR UPDATE SKIP LOCKED` (avec `LIMIT 1`), (c) parse `serialized_params` JSON contre `ScanJobV1`, (d) effectue un no-op de scan en v1 (placeholder pour les vrais sondeurs livrés au change `scan-engine`), (e) écrit le résultat en table métier puis update la ligne `good_jobs` avec `finished_at = NOW()`. Idempotence : table de déduplication par `idempotency_key` ou `INSERT ... ON CONFLICT DO NOTHING` côté résultats.
   - **Test plan** : Test d'intégration lance 2 workers Go sur la même DB, enqueue 100 jobs (dont 10 doublons par `idempotency_key`) ; assure que (a) tous les jobs uniques sont traités, (b) les doublons sont détectés et acquittés sans seconde écriture, (c) la charge est répartie (chaque worker traite > 30 % du volume unique).
 
@@ -102,7 +102,7 @@ Checklist d'adoption de la stack Vue 3 + Vite + Rails 8 + Go + GoodJob. Chaque t
 
 ## Acceptation pour le change dans son ensemble
 
-- [ ] Chaque exigence du spec delta `architecture` a au moins un test automatisé passant en CI.
-- [ ] Le linter de stack (`scripts/check_stack.sh`) tourne en CI sur chaque PR et bloque les fusions qui introduisent React/Angular/Svelte/Nuxt, Rust, un broker externe, une colonne `tenant_id`, ou un client RPC synchrone vers les workers.
-- [ ] `openspec/project.md` est cohérent avec la stack figée ; les notes de `init-reconaut-platform/tasks.md` sont alignées sur Rails 8 + Go + GoodJob.
-- [ ] Une commande `bin/doctor` (Rake task `rails reconaut:doctor`) imprime : version Rails, version Go embarquée du dernier worker connu, taille de la file `good_jobs` (lignes `finished_at IS NULL`), dernier `schema_version` connu côté Rails et côté Go.
+- [x] Chaque exigence du spec delta `architecture` a au moins un test automatisé passant en CI.
+- [x] Le linter de stack (`scripts/check_stack.sh`) tourne en CI sur chaque PR et bloque les fusions qui introduisent React/Angular/Svelte/Nuxt, Rust, un broker externe, une colonne `tenant_id`, ou un client RPC synchrone vers les workers.
+- [x] `openspec/project.md` est cohérent avec la stack figée ; les notes de `init-reconaut-platform/tasks.md` sont alignées sur Rails 8 + Go + GoodJob.
+- [x] Une commande `bin/doctor` (Rake task `rails reconaut:doctor`) imprime : version Rails, version Go embarquée du dernier worker connu, taille de la file `good_jobs` (lignes `finished_at IS NULL`), dernier `schema_version` connu côté Rails et côté Go.
