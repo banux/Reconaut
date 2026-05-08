@@ -28,16 +28,29 @@ fail() {
   errors=1
 }
 
-# --- frontend : Vue 3 only ----------------------------------------------------
+# --- frontend : pas de SPA, TUI Go uniquement -------------------------------
+# Cf. openspec/changes/replace-web-with-tui/ : la SPA Vue a été retirée
+# au profit du binaire `apps/tui/cmd/reconautctl`. Toute résurgence d'un
+# framework web (Vue, React, Angular, Svelte, Solid, Next, Nuxt) est
+# rejetée. Les fichiers `.vue`/`.jsx`/`.tsx`/`.svelte` n'ont plus leur
+# place dans le repo.
 if [[ -d apps/web ]]; then
-  if find apps/web -type f \( -name "*.jsx" -o -name "*.tsx" \) 2>/dev/null | grep -q .; then
-    fail "apps/web contient des fichiers .jsx ou .tsx (frontend doit etre Vue 3)"
+  fail "apps/web/ a été retiré par replace-web-with-tui ; ne pas le réintroduire"
+fi
+if find apps -type f \( -name "*.vue" -o -name "*.jsx" -o -name "*.tsx" -o -name "*.svelte" \) 2>/dev/null | grep -q .; then
+  fail "frontend-stack-violation: web frameworks not shipped in v1, use the Go TUI"
+fi
+
+# --- pas d'asset pipeline Rails (cf. replace-web-with-tui §1.3) -------------
+# Reconaut ne sert pas de bundle SPA depuis Rails. Toute gem d'asset
+# pipeline est interdite — le binaire TUI Go est la seule UI livrée.
+if [[ -f apps/api/Gemfile ]]; then
+  if grep -qiE '^\s*gem\s+["'"'"'](propshaft|importmap-rails|sprockets-rails|webpacker|jsbundling-rails|cssbundling-rails)["'"'"']' apps/api/Gemfile; then
+    fail "apps/api/Gemfile reference une gem d'asset pipeline web (propshaft/importmap/sprockets/webpacker/jsbundling/cssbundling) ; Reconaut ne sert pas de SPA"
   fi
-  if [[ -f apps/web/package.json ]]; then
-    if grep -qE '"(react|@angular/core|svelte|next|nuxt)"' apps/web/package.json; then
-      fail "apps/web/package.json reference React/Angular/Svelte/Next/Nuxt"
-    fi
-  fi
+fi
+if [[ -d apps/api/app/javascript ]]; then
+  fail "apps/api/app/javascript/ existe ; Reconaut ne sert pas de bundle JS depuis Rails"
 fi
 
 # --- pas de Python ni de Rust ------------------------------------------------

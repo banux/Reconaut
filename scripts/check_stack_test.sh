@@ -35,11 +35,20 @@ assert_lint() {
 # --- 1. Etat propre : doit passer ---
 assert_lint "clean tree -> exit 0" 0
 
-# --- 2. Fichier .jsx interdit ---
-mkdir -p apps/web/src
-touch apps/web/src/Bad.jsx
-assert_lint ".jsx in apps/web -> exit != 0" 1
-rm -f apps/web/src/Bad.jsx
+# --- 2. Fichier .vue/.jsx/.svelte interdit n'importe où ---
+# (Cf. replace-web-with-tui §1.2 : pas de SPA, TUI Go uniquement)
+touch apps/api/Bad.vue
+assert_lint ".vue file anywhere -> exit != 0" 1
+rm -f apps/api/Bad.vue
+
+mkdir -p apps/scratch && touch apps/scratch/Bad.svelte
+assert_lint ".svelte file anywhere -> exit != 0" 1
+rm -rf apps/scratch
+
+# Réintroduction d'apps/web/ -> rejetée
+mkdir -p apps/web && touch apps/web/index.html
+assert_lint "apps/web/ reintroduced -> exit != 0" 1
+rm -rf apps/web
 
 # --- 3. tenant_id dans une migration Rails ---
 mkdir -p apps/api/db/migrate
@@ -78,11 +87,16 @@ echo 'gem "posthog-ruby"' >> apps/api/Gemfile
 assert_lint "posthog gem in apps/api/Gemfile -> exit != 0" 1
 mv apps/api/Gemfile.bak apps/api/Gemfile
 
-# --- 8. SDK d'analytics tiers cote Vue ---
-cp apps/web/package.json apps/web/package.json.bak
-node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("apps/web/package.json"));p.dependencies["mixpanel-browser"]="^2.0.0";fs.writeFileSync("apps/web/package.json", JSON.stringify(p, null, 2))'
-assert_lint "mixpanel-browser in apps/web/package.json -> exit != 0" 1
-mv apps/web/package.json.bak apps/web/package.json
+# --- 8. Asset pipeline Rails interdit (cf. replace-web-with-tui §1.3) ---
+cp apps/api/Gemfile apps/api/Gemfile.bak
+echo 'gem "propshaft"' >> apps/api/Gemfile
+assert_lint "propshaft gem in apps/api/Gemfile -> exit != 0" 1
+mv apps/api/Gemfile.bak apps/api/Gemfile
+
+# Répertoire app/javascript dans Rails -> rejeté
+mkdir -p apps/api/app/javascript
+assert_lint "apps/api/app/javascript reintroduced -> exit != 0" 1
+rm -rf apps/api/app/javascript
 
 # --- 9. Mention MSSP dans le README -> exit != 0 ---
 cp README.md README.md.bak

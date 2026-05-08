@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# bin/test - lance les suites de toutes les sous-apps en parallele.
+# bin/test - lance les suites de toutes les sous-apps.
 #
 # Source de verite : openspec/changes/add-tech-stack/tasks.md section 2.1
-#   "bin/test execute en parallele apps/api (rspec), apps/web (vitest),
-#    apps/scanner (go test ./...)"
-#
-# Iteration courante : aucune sous-app n'existe encore. Le script
-# detecte leur presence et les saute proprement, ce qui permet a la
-# CI de tourner pendant les iterations de bootstrap. Quand une sous-app
-# apparait, sa suite devient bloquante.
+# Mise à jour replace-web-with-tui : `apps/web` retiré au profit de la
+# TUI Go `apps/tui` ; chaque scanner spécialisé sous `apps/scanner-<kind>`
+# (squelette unifié dans `apps/scanner` en attendant le split §3.1).
 
 set -euo pipefail
 
@@ -33,12 +29,12 @@ run_suite() {
   fi
 }
 
-run_suite "apps/api  (rspec)"   "apps/api"     "[[ -f Gemfile.lock ]] && bundle exec rspec || echo '[skip] apps/api: Gemfile.lock missing'"
-run_suite "apps/web  (vitest)"  "apps/web"     "[[ -f package.json ]] && (pnpm test 2>/dev/null || npm test) || echo '[skip] apps/web: package.json missing'"
-run_suite "apps/scanner (go)"   "apps/scanner" "[[ -f go.mod ]] && go test ./... || echo '[skip] apps/scanner: go.mod missing'"
+run_suite "apps/api     (rspec)" "apps/api"     "[[ -f Gemfile.lock ]] && bundle exec rspec || echo '[skip] apps/api: Gemfile.lock missing'"
+run_suite "apps/scanner  (go)"   "apps/scanner" "[[ -f go.mod ]] && go test ./... || echo '[skip] apps/scanner: go.mod missing'"
+run_suite "apps/tui      (go)"   "apps/tui"     "[[ -f go.mod ]] && go test ./... || echo '[skip] apps/tui: go.mod missing'"
 
 if (( failed != 0 )); then
   exit 1
 fi
 
-echo "==> all suites green (or trivially skipped during bootstrap)"
+echo "==> all suites green"

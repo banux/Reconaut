@@ -14,7 +14,19 @@
 # d'exécuter le job côté Rails (par ex. queue_adapter `:test` ou bug de
 # config) ; dans ce cas on lève pour ne pas masquer l'erreur.
 class ScanJob < ApplicationJob
-  queue_as :scan
+  # Queue spécialisée par scan_kind (cf. replace-web-with-tui §3.2 :
+  # `scan:tcp_probe`, `scan:tls_capture`, etc.). Chaque worker Go
+  # spécialisé `scanner-<kind>` ne lit que sa propre queue, ce qui
+  # permet à GoodJob de pousser le routage côté SQL et à l'opérateur de
+  # scaler chaque type indépendamment. Si un payload n'a pas de
+  # `scan_kind` (cas pathologique), on retombe sur la queue générique
+  # `scan` pour ne pas perdre le job — un seul scanner-fallback peut
+  # être déployé pour drainer ces cas.
+  queue_as do
+    payload = arguments.first
+    kind    = payload.is_a?(Hash) ? (payload["scan_kind"] || payload[:scan_kind]) : nil
+    kind ? "scan:#{kind}" : "scan"
+  end
 
   # Le payload est un Hash conforme au schéma `ScanJobV1` (cf.
   # `packages/job-schema/scan_job_v1.json`). On le sérialise tel quel ;

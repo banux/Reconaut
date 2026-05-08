@@ -66,6 +66,8 @@ func newServer(t *testing.T, rec *recordingServer) *httptest.Server {
 }
 
 func TestSubcommands_AllUseMCPExceptLogin(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isole le stockage des credentials
+
 	rec := &recordingServer{}
 	srv := newServer(t, rec)
 	defer srv.Close()

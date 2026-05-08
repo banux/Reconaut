@@ -16,10 +16,11 @@ RSpec.describe Reconaut::GoodJobBus do
     }
   end
 
-  it "appelle ScanJob.perform_later avec le payload tel quel" do
+  it "appelle ScanJob.perform_later sur la queue spécialisée scan:<scan_kind>" do
+    # Cf. replace-web-with-tui §3.2 : queue dérivée du scan_kind du payload.
     expect do
       described_class.new.enqueue(payload: payload)
-    end.to have_enqueued_job(ScanJob).with(payload).on_queue("scan")
+    end.to have_enqueued_job(ScanJob).with(payload).on_queue("scan:tcp_port_scan")
   end
 
   it "renvoie { scan_id: <string> } correlable" do

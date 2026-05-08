@@ -1,8 +1,12 @@
 // Sous-commande `reconautctl login` : exception au pacte MCP-only.
-// Appelle POST /auth/sessions puis (optionnellement) POST /auth/api_keys
-// pour obtenir une clé API personnelle. C'est le SEUL chemin REST que
-// le binaire emprunte (cf. spec mcp-as-primary-entrypoint, scenario
-// "Bootstrap initial — REST puis MCP").
+// Appelle POST /auth/sessions pour obtenir une clé API personnelle puis
+// la persiste sous $XDG_CONFIG_HOME/reconaut/credentials (fichier 0600,
+// répertoire 0700). C'est le SEUL chemin REST que le binaire emprunte
+// (cf. spec mcp-as-primary-entrypoint, scenario "Bootstrap initial —
+// REST puis MCP").
+//
+// Le mot de passe N'EST PAS persisté ; seul le token de la clé API est
+// stocké. Cf. openspec/changes/replace-web-with-tui/tasks.md §2.2.
 package main
 
 import (
@@ -13,6 +17,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/banux/Reconaut/apps/tui/internal/auth"
 )
 
 type LoginResult struct {
@@ -43,7 +49,8 @@ func runLogin(ctx context.Context, baseURL, password string, out io.Writer, hc *
 	}
 	var payload struct {
 		APIKey struct {
-			Secret string `json:"secret"`
+			Token  string `json:"token"`
+			Secret string `json:"secret"` // rétrocompat avec un futur renommage Rails
 		} `json:"api_key"`
 		User struct {
 			ID string `json:"id"`
@@ -52,6 +59,16 @@ func runLogin(ctx context.Context, baseURL, password string, out io.Writer, hc *
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
+	token := payload.APIKey.Token
+	if token == "" {
+		token = payload.APIKey.Secret
+	}
+
+	// Persiste la clé sous $XDG_CONFIG_HOME/reconaut/credentials.
+	if err := auth.Save(auth.Credentials{Server: strings.TrimRight(baseURL, "/"), APIKey: token}); err != nil {
+		return nil, fmt.Errorf("login: persist credentials: %w", err)
+	}
+
 	fmt.Fprintf(out, "logged in as %s\n", payload.User.ID)
-	return &LoginResult{APIKey: payload.APIKey.Secret, UserID: payload.User.ID}, nil
+	return &LoginResult{APIKey: token, UserID: payload.User.ID}, nil
 }

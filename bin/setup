@@ -29,10 +29,10 @@ docker compose up -d postgres
 # Bloc actif quand apps/api existera :
 # (cd apps/api && bundle install)
 
-# Bloc actif quand apps/web existera :
-# (cd apps/web && pnpm install)
-
 # Bloc actif quand apps/scanner existera :
 # (cd apps/scanner && go mod download)
+
+# Bloc actif quand apps/tui existera (binaire reconautctl) :
+# (cd apps/tui && go mod download)
 
 echo "==> setup ok (iteration bootstrap)"

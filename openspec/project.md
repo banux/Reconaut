@@ -19,7 +19,8 @@ Reconaut est une **base de connaissance d'actifs internet** open source, auto-h�
 
 ## Stack
 
-- **Frontend** : Vue 3 (Composition API) + Vite. Pas de Nuxt en v1.
+- **Frontend** : binaire Go `reconautctl` (TUI **bubbletea/Charm** sous licence MIT, compatible AGPL). Pas de SPA web, pas de Vue/React/Angular/Svelte/Nuxt en v1 — la TUI est l'interface opérateur unique (cf. change `replace-web-with-tui`). Le binaire consomme MCP HTTP+SSE pour les opérations métier ; seul le login bootstrap parle REST.
+- **Workers de scan spécialisés** : un binaire Go par `scan_kind` (`scanner-tcp_probe`, `scanner-tls_capture`, `scanner-http_banner`, `scanner-subdomain_enum`, `scanner-service_fingerprint`), chacun consommant sa propre queue GoodJob `scan:<kind>`. La spécialisation réduit la surface d'attaque par binaire et permet de scaler chaque type indépendamment.
 - **Backend applicatif** : Ruby on Rails 8 (monolithe) — héberge l'API, l'agent conversationnel, le journal d'audit et le serveur MCP HTTP+SSE dans le même process.
 - **Workers de scan** : Go (Golang), binaires statiques séparés du process Rails. Communication Rails ↔ Go uniquement via la file de jobs.
 - **File de jobs** : **GoodJob** (adapter ActiveJob backé par Postgres, mature et éprouvé en production). Aucun broker externe (pas de Redis / RabbitMQ / NATS / Kafka). Les workers Go consomment la table `good_jobs` directement via `SELECT ... FOR UPDATE SKIP LOCKED`.

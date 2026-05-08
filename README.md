@@ -14,7 +14,8 @@ pour pousser des resultats depuis nmap, nuclei et autres scanners tiers.
 
 ## Quickstart (5 minutes)
 
-Pre-requis : Docker, Ruby 3.4+, Node 22+, Go 1.23+.
+Pre-requis : Docker, Ruby 3.4+, Go 1.23+. Pas de Node — la SPA Vue a
+ete retiree au profit de la TUI Go `reconautctl`.
 
 ```sh
 git clone https://github.com/banux/Reconaut.git
@@ -25,7 +26,8 @@ bin/setup
 
 # 2. Installer les dependances des sous-apps.
 (cd apps/api && bundle install)
-(cd apps/web && npm install)
+(cd apps/scanner && go mod download)
+(cd apps/tui && go mod download)
 
 # 3. Poser le password de l'opérateur unique (mono-user). Idempotent :
 #    refuse si un user existe déjà.
@@ -33,11 +35,14 @@ RECONAUT_OPERATOR_PASSWORD='changez-moi' \
   (cd apps/api && bundle exec rails reconaut:set_password)
 # -> imprime { user, api_key } : NOTEZ l'api_key.token, plus jamais consultable.
 
-# 4. Lancer Rails en API.
+# 4. Lancer Rails en API (heberge MCP HTTP+SSE).
 (cd apps/api && bundle exec rails server)
 
-# 5. Lancer le frontend Vue.
-(cd apps/web && npm run dev)
+# 5. Construire et logguer la TUI operateur.
+(cd apps/tui && go build ./cmd/reconautctl)
+RECONAUT_URL=http://localhost:3000 RECONAUT_PASSWORD='changez-moi' \
+  apps/tui/reconautctl login
+# -> stocke la cle API dans $XDG_CONFIG_HOME/reconaut/credentials (0600).
 
 # 6. Lancer les tests.
 bin/test
@@ -75,8 +80,8 @@ graph-reader et l'eventuelle dependance externe.
 ```
 apps/
   api/         Rails 8 monolithe (API, agent, MCP, audit, auth locale)
-  web/         Vue 3 + Vite (frontend statique)
-  scanner/     Workers Go (binaires statiques, consomment good_jobs)
+  tui/         Binaire Go reconautctl (TUI bubbletea, client MCP HTTP+SSE)
+  scanner/     Workers Go specialises par scan_kind (cmd/scanner-<kind>/)
 packages/
   job-schema/  Schemas JSON canoniques echanges Rails <-> Go
 ops/
@@ -88,7 +93,8 @@ scripts/       Outillage CI (linter de stack, etc.)
 
 ## Stack figee
 
-- **Frontend** : Vue 3 (Composition API) + Vite. Pas de Nuxt en v1.
+- **Frontend** : binaire Go `reconautctl` (TUI bubbletea/Charm). Pas de
+  SPA web. Le binaire consomme MCP HTTP+SSE pour les operations metier.
 - **Backend** : Rails 8 monolithe (API, agent conversationnel, journal
   d'audit, serveur MCP HTTP+SSE) en un seul process.
 - **Workers de scan** : Go (binaires statiques separes du process Rails).
