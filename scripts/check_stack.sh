@@ -100,6 +100,39 @@ if [[ -d apps/scanner ]] && [[ -f apps/scanner/go.mod ]]; then
   fi
 fi
 
+# --- positionnement narratif : pas de mention MSSP -------------------------
+# cf. openspec/changes/reposition-as-agent-knowledge-base/ qui retire
+# l'objectif MSSP du perimetre produit. Allowlist : le change qui retire
+# MSSP a le droit de le mentionner pour expliquer ce qui disparait.
+mssp_allowlist=(
+  "openspec/changes/reposition-as-agent-knowledge-base/"
+)
+
+# Cherche MSSP dans les zones narratives.
+mssp_hits=$(grep -RnIE 'MSSP' \
+  openspec/ docs/ README.md 2>/dev/null \
+  | grep -v "$(printf -- '-e %s ' "${mssp_allowlist[@]}" | sed 's| -e | -e |g')" || true)
+
+# Filtre maison : retire les lignes provenant d'un fichier sous l'allowlist.
+filtered=""
+if [[ -n "$mssp_hits" ]]; then
+  while IFS= read -r line; do
+    skip=0
+    for allow in "${mssp_allowlist[@]}"; do
+      if [[ "$line" == "$allow"* ]]; then
+        skip=1
+        break
+      fi
+    done
+    [[ $skip -eq 0 ]] && filtered+="$line"$'\n'
+  done <<< "$mssp_hits"
+fi
+
+if [[ -n "$filtered" ]]; then
+  fail "MSSP mentionne dans la doc / les specs hors de la zone autorisee :"
+  echo "$filtered" >&2
+fi
+
 if (( errors != 0 )); then
   echo "check_stack: KO ($errors violations)" >&2
   exit 1

@@ -14,12 +14,13 @@ RSpec.describe Reconaut::Auth::Authenticator do
 
   describe "#from_password" do
     it "renvoie une Identity sur email + password corrects" do
-      users.create(email: "a@b.c", password_hash: hasher.hash("hunter2"), role: :owner)
+      users.create(email: "a@b.c", password_hash: hasher.hash("hunter2"))
       identity = auth.from_password(email: "a@b.c", password: "hunter2")
       expect(identity).not_to be_nil
       expect(identity.user.email).to eq("a@b.c")
       expect(identity.source).to eq(:password)
-      expect(identity.role).to eq(:owner)
+      # Mode mono-user : tout opérateur authentifié a role :operator.
+      expect(identity.role).to eq(:operator)
     end
 
     it "renvoie nil sur mauvais password" do

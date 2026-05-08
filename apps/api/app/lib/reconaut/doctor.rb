@@ -53,10 +53,26 @@ module Reconaut
       age_loaded?:             ->(_) { false },
       region:                  ->(_) { nil },
       graph_lag_p95:           ->(_) { nil },
-      graph_role_can_write?:   ->(_) { true } # par securite, fail closed.
+      graph_role_can_write?:   ->(_) { true }, # par securite, fail closed.
+      # Probes "info" pour l'acceptance criterion bin/doctor de
+      # add-tech-stack section 6 : version Rails, taille file good_jobs,
+      # versions de schema cote Rails et derniere heartbeat worker Go.
+      rails_version:           ->(_) { defined?(Rails) ? Rails.version : nil },
+      good_jobs_pending:       ->(_) { nil },
+      schema_versions:         ->(_) { safe_schema_versions },
+      last_worker_heartbeat:   ->(_) { nil }
     }.freeze
 
     module_function
+
+    # safe_schema_versions : evite de planter au boot si JobSchema n'est
+    # pas chargeable (par ex. tests Doctor isoles sans Rails autoload).
+    def safe_schema_versions
+      require_relative "../job_schema/registry"
+      JobSchema::Registry.schema_versions
+    rescue StandardError
+      nil
+    end
 
     def run(probes: {}, env: ENV)
       probes = DEFAULTS.merge(probes)
@@ -68,6 +84,10 @@ module Reconaut
       checks << check_graph_lag(probes, ctx)
       checks << check_graph_role(probes, ctx)
       checks << check_external_llm(probes, ctx)
+      checks << check_rails_version(probes, ctx)
+      checks << check_good_jobs(probes, ctx)
+      checks << check_schema_versions(probes, ctx)
+      checks << check_last_worker(probes, ctx)
 
       # ok = aucun :fail. Les statuts :info (provider externe configure)
       # et :unknown (lag pas encore mesure, normal au boot) sont
@@ -136,6 +156,70 @@ module Reconaut
         status: external ? :info : :ok,
         details: external ? "provider=#{provider} (sortance reseau requise)" : "false (instance auto-suffisante)"
       )
+    end
+
+    def check_rails_version(probes, ctx)
+      version = probes[:rails_version].call(ctx)
+      Check.new(
+        name:    "rails_version",
+        status:  version ? :info : :unknown,
+        details: version ? version.to_s : "Rails non charge"
+      )
+    end
+
+    def check_good_jobs(probes, ctx)
+      pending = probes[:good_jobs_pending].call(ctx)
+      if pending.nil?
+        Check.new(
+          name: "good_jobs_pending",
+          status: :unknown,
+          details: "DB indisponible ou table good_jobs non creee"
+        )
+      else
+        Check.new(
+          name: "good_jobs_pending",
+          status: :info,
+          details: "#{Integer(pending)} job(s) en attente"
+        )
+      end
+    end
+
+    def check_schema_versions(probes, ctx)
+      versions = probes[:schema_versions].call(ctx)
+      if versions.nil? || versions.empty?
+        Check.new(
+          name: "schema_versions_rails",
+          status: :unknown,
+          details: "schemas job-schema introuvables"
+        )
+      else
+        pretty = versions.map { |k, v| "#{k}=v#{v}" }.join(", ")
+        Check.new(
+          name:    "schema_versions_rails",
+          status:  :info,
+          details: pretty
+        )
+      end
+    end
+
+    def check_last_worker(probes, ctx)
+      heartbeat = probes[:last_worker_heartbeat].call(ctx)
+      if heartbeat.nil?
+        Check.new(
+          name: "last_worker_heartbeat",
+          status: :unknown,
+          details: "aucune heartbeat enregistree (worker pas encore connecte ?)"
+        )
+      else
+        worker_version  = heartbeat[:worker_version] || heartbeat["worker_version"]
+        schema_version  = heartbeat[:schema_version] || heartbeat["schema_version"]
+        seen_at         = heartbeat[:seen_at]        || heartbeat["seen_at"]
+        Check.new(
+          name:    "last_worker_heartbeat",
+          status:  :info,
+          details: "worker_version=#{worker_version || 'n/a'}, schema_version=#{schema_version || 'n/a'}, seen_at=#{seen_at || 'n/a'}"
+        )
+      end
     end
   end
 end

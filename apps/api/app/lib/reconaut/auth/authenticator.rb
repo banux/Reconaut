@@ -29,8 +29,12 @@ module Reconaut
         end
       end
 
+      # En mode mono-user (cf. openspec/changes/single-user-only/),
+      # tous les utilisateurs sont l'opérateur unique. La méthode
+      # `role` est conservée pour compat des controllers hérités mais
+      # renvoie toujours `:operator`.
       def role
-        user.role
+        :operator
       end
     end
 
@@ -68,6 +72,31 @@ module Reconaut
           @password_hasher.verify(password, fake_hash)
           return nil
         end
+        return nil if user.disabled?
+        return nil unless @password_hasher.verify(password, user.password_hash)
+
+        Identity.new(user: user, api_key: nil, source: :password)
+      end
+
+      # En mode mono-user (cf. openspec/changes/single-user-only/), il
+      # n'y a qu'un seul user enregistré : on peut authentifier sur le
+      # password seul. Si plusieurs users existent (instance non
+      # bootstrappée correctement), on refuse pour éviter d'exposer une
+      # ambiguité.
+      def from_password_only(password:)
+        users = @users.list
+        if users.empty?
+          @password_hasher.verify(password, fake_hash)
+          return nil
+        end
+        if users.size > 1
+          # Cas pathologique. On verifie quand meme un fake hash pour
+          # rester equilibre cote timing puis on refuse.
+          @password_hasher.verify(password, fake_hash)
+          return nil
+        end
+
+        user = users.first
         return nil if user.disabled?
         return nil unless @password_hasher.verify(password, user.password_hash)
 

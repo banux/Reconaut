@@ -65,6 +65,12 @@
       "type": "object",
       "description": "Present si status in {failure, partial}. Champ libre pour la v1.",
       "additionalProperties": true
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Origine du resultat. 'internal' pour les workers Go embarques, ou un nom d'outil externe ('nmap', 'nuclei', etc.) quand le payload arrive via ingest_scan_result. Cf. openspec/changes/reposition-as-agent-knowledge-base/specs/integrations/spec.md."
     }
   }
 }

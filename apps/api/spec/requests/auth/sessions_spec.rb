@@ -9,8 +9,7 @@ RSpec.describe "POST /auth/sessions", type: :request do
     registry.password_hasher = Reconaut::Auth::PasswordHasher::Plain.new
     registry.user_store.create(
       email: "owner@reconaut.local",
-      password_hash: registry.password_hasher.hash("hunter2"),
-      role: :owner
+      password_hash: registry.password_hasher.hash("hunter2")
     )
   end
 
@@ -24,7 +23,8 @@ RSpec.describe "POST /auth/sessions", type: :request do
     expect(response).to have_http_status(:created)
     body = JSON.parse(response.body, symbolize_names: true)
     expect(body[:user][:email]).to eq("owner@reconaut.local")
-    expect(body[:user][:role]).to eq("owner")
+    # Mode mono-user : pas de role exposé dans le body.
+    expect(body[:user]).not_to have_key(:role)
     expect(body[:user]).not_to have_key(:password_hash)
     expect(body[:api_key][:token]).to be_a(String)
     expect(body[:api_key][:prefix]).to be_a(String)

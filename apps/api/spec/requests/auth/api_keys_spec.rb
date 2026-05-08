@@ -89,21 +89,26 @@ RSpec.describe "/auth/api_keys", type: :request do
       expect(response).to have_http_status(:created)
     end
 
-    it "Bearer viewer ne peut PAS creer un scope" do
-      viewer = registry.user_store.create(
-        email: "viewer@reconaut.local",
-        password_hash: registry.password_hasher.hash("p"),
-        role: :viewer
+    # En mode mono-user (single-user-only), tout opérateur authentifié
+    # est :operator et peut muter le scope. Le test « viewer ne peut
+    # pas muter » a perdu son objet — la défense-en-profondeur passe
+    # désormais par les scopes attachés à chaque clé API, pas par un
+    # role différent. Test réécrit pour confirmer que tout user
+    # authentifié peut créer un scope.
+    it "Bearer operator peut creer un scope (tout user authentifie est :operator)" do
+      second = registry.user_store.create(
+        email: "second@reconaut.local",
+        password_hash: registry.password_hasher.hash("p")
       )
-      viewer_token = registry.authenticator.issue_api_key(user_id: viewer.id)[:token]
+      second_token = registry.authenticator.issue_api_key(user_id: second.id)[:token]
 
       post "/scopes",
-        params: { kind: "ip", value: "192.0.2.1" }.to_json,
+        params: { kind: "ip", value: "198.51.100.1" }.to_json,
         headers: {
           "Content-Type" => "application/json",
-          "Authorization" => "Bearer #{viewer_token}"
+          "Authorization" => "Bearer #{second_token}"
         }
-      expect(response).to have_http_status(:forbidden)
+      expect(response).to have_http_status(:created)
     end
   end
 
@@ -117,8 +122,7 @@ RSpec.describe "/auth/api_keys", type: :request do
       # 1. Creer un compte
       bootstrap_user = registry.user_store.create(
         email: "air-gapped@local",
-        password_hash: registry.password_hasher.hash("p"),
-        role: :owner
+        password_hash: registry.password_hasher.hash("p")
       )
       # 2. Issuer une cle API
       issued = registry.authenticator.issue_api_key(user_id: bootstrap_user.id)

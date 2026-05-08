@@ -84,7 +84,19 @@ node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("apps/web/pac
 assert_lint "mixpanel-browser in apps/web/package.json -> exit != 0" 1
 mv apps/web/package.json.bak apps/web/package.json
 
-# --- 7. Etat propre apres cleanup ---
+# --- 9. Mention MSSP dans le README -> exit != 0 ---
+cp README.md README.md.bak
+echo "Reconaut convient aussi aux MSSP qui veulent..." >> README.md
+assert_lint "MSSP mention in README -> exit != 0" 1
+mv README.md.bak README.md
+
+# --- 10. Mention MSSP dans une doc -> exit != 0 ---
+mkdir -p docs/_test_tmp
+echo "Pour les MSSP qui ..." > docs/_test_tmp/rogue.md
+assert_lint "MSSP mention in docs -> exit != 0" 1
+rm -rf docs/_test_tmp
+
+# --- Etat propre apres cleanup ---
 assert_lint "clean tree (post-cleanup) -> exit 0" 0
 
 if (( fail != 0 )); then

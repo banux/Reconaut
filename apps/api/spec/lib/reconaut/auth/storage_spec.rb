@@ -8,38 +8,43 @@ RSpec.describe Reconaut::Auth::Storage do
     subject(:store) { described_class.new }
 
     it "create + find_by_email + find" do
-      user = store.create(email: "Alice@example.com", password_hash: "h1", role: :owner)
+      user = store.create(email: "Alice@example.com", password_hash: "h1")
       expect(user.email).to eq("alice@example.com") # downcase + trim
-      expect(user.role).to eq(:owner)
       expect(store.find_by_email("alice@example.com").id).to eq(user.id)
       expect(store.find(user.id).id).to eq(user.id)
     end
 
+    it "User n'a plus de champ role (mono-user)" do
+      user = store.create(email: "a@b.c", password_hash: "h")
+      expect(user).not_to respond_to(:role)
+      expect(user.to_h).not_to have_key(:role)
+    end
+
+    it "create accepte le kwarg role: pour rétrocompatibilité mais l'ignore" do
+      user = store.create(email: "a@b.c", password_hash: "h", role: :owner)
+      expect(user).not_to respond_to(:role)
+    end
+
     it "rejette un email invalide" do
-      expect { store.create(email: "not-an-email", password_hash: "h", role: :owner) }
+      expect { store.create(email: "not-an-email", password_hash: "h") }
         .to raise_error(ArgumentError, /invalid_email/)
     end
 
-    it "rejette un role invalide" do
-      expect { store.create(email: "a@b.c", password_hash: "h", role: :stranger) }
-        .to raise_error(ArgumentError, /invalid_role/)
-    end
-
     it "rejette un email deja pris" do
-      store.create(email: "a@b.c", password_hash: "h", role: :owner)
-      expect { store.create(email: "a@b.c", password_hash: "h", role: :viewer) }
+      store.create(email: "a@b.c", password_hash: "h")
+      expect { store.create(email: "a@b.c", password_hash: "h") }
         .to raise_error(ArgumentError, /email_taken/)
     end
 
     it "User#to_h n'expose JAMAIS le password_hash" do
-      user = store.create(email: "a@b.c", password_hash: "supersecret", role: :owner)
+      user = store.create(email: "a@b.c", password_hash: "supersecret")
       h = user.to_h
       expect(h).not_to have_key(:password_hash)
       expect(h.values.map(&:to_s).join("|")).not_to include("supersecret")
     end
 
     it "disable! marque l'utilisateur comme disabled" do
-      user = store.create(email: "a@b.c", password_hash: "h", role: :owner)
+      user = store.create(email: "a@b.c", password_hash: "h")
       disabled = store.disable!(user.id)
       expect(disabled.disabled?).to be true
       expect(store.find(user.id).disabled?).to be true

@@ -14,7 +14,17 @@ module Auth
       password = params[:password].to_s
 
       auth = Reconaut::Registry.default.authenticator
-      identity = auth.from_password(email: email, password: password)
+
+      # Mode mono-user (cf. openspec/changes/single-user-only/§4.2) :
+      # le body peut ne contenir que `password`. Si email est fourni
+      # explicitement, on garde le chemin email+password pour
+      # rétrocompat (et pour les tests historiques).
+      identity =
+        if email.empty?
+          auth.from_password_only(password: password)
+        else
+          auth.from_password(email: email, password: password)
+        end
 
       if identity.nil?
         return render(status: :unauthorized, json: { error: "invalid_credentials" })

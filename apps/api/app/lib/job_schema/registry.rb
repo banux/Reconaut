@@ -55,5 +55,20 @@ module JobSchema
       )
       [errors.empty?, errors]
     end
+
+    # schema_version_for("ScanJobV1") -> 1 (lit `properties.schema_version.const`).
+    # Utilisé par la routine doctor pour rapporter la dernière version
+    # de schéma connue côté Rails (cf. add-tech-stack section 6 :
+    # acceptation `bin/doctor`).
+    def schema_version_for(name)
+      schema = load(name)
+      schema.dig("properties", "schema_version", "const")
+    end
+
+    # Map { name => version }, calculée à chaque appel pour rester
+    # cohérente avec un éventuel hot-reload des schémas en dev.
+    def schema_versions
+      names.to_h { |name| [name, schema_version_for(name)] }
+    end
   end
 end

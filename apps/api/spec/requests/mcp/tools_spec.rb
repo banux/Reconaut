@@ -50,7 +50,7 @@ RSpec.describe "MCP tools endpoint", type: :request do
 
       body = JSON.parse(response.body, symbolize_names: true)
       names = body[:tools].map { |t| t[:name] }
-      expect(names).to contain_exactly("search_hosts", "get_host", "list_scopes", "request_scan")
+      expect(names).to contain_exactly("search_hosts", "get_host", "list_scopes", "add_scope", "revoke_scope", "request_scan", "ingest_scan_result", "system_doctor")
 
       search = body[:tools].find { |t| t[:name] == "search_hosts" }
       expect(search[:scopes]).to include("read:hosts")

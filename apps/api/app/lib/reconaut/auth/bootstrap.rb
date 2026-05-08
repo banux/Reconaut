@@ -24,10 +24,19 @@ module Reconaut
 
       module_function
 
-      def call(email:, password:, registry: Reconaut::Registry.default)
-        if email.to_s.strip.empty? || password.to_s.empty?
-          raise MissingCredentialsError, "email and password required"
+      # En mode mono-user (cf. openspec/changes/single-user-only/), le
+      # password seul suffit — l'email est un label affichable, pas un
+      # identifiant unique. La rake task `set_password` ne demande que
+      # RECONAUT_OPERATOR_PASSWORD ; les anciens chemins de bootstrap
+      # avec email explicite restent acceptés pour rétrocompat.
+      DEFAULT_OPERATOR_EMAIL = "operator@local"
+
+      def call(email: DEFAULT_OPERATOR_EMAIL, password:, registry: Reconaut::Registry.default)
+        if password.to_s.empty?
+          raise MissingCredentialsError, "password required"
         end
+        email = email.to_s.strip
+        email = DEFAULT_OPERATOR_EMAIL if email.empty?
 
         # Au plus un appel reussi par instance.
         if registry.user_store.list.any?
@@ -38,8 +47,7 @@ module Reconaut
         hasher = registry.password_hasher
         user = registry.user_store.create(
           email: email,
-          password_hash: hasher.hash(password),
-          role: :owner
+          password_hash: hasher.hash(password)
         )
         issued = registry.authenticator.issue_api_key(user_id: user.id)
 
