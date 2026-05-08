@@ -74,6 +74,69 @@ module Mcp
         { scopes: scopes }
       end
 
+      # add_scope : ajoute une entree de scope (cidr / domain / ip / host)
+      # via le use case Scopes::UseCases::Add. La verification RBAC est
+      # double : l'allowlist MCP write:scopes filtre deja les viewers,
+      # le use case re-verifie en passant caller_role: :admin (pris pour
+      # garanti puisque write:scopes implique au moins admin dans la
+      # matrice mcp-server).
+      #
+      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
+      # (Requirement: MCP Tool Surface, scope write:scopes).
+      ToolRegistry.register(
+        name:   "add_scope",
+        scopes: [:"write:scopes"],
+        params_schema: {
+          kind:  { type: :enum, values: %w[ip cidr domain host] },
+          value: { type: :string, min_length: 1, max_length: 255 }
+        }
+      ) do |params:, caller_id:|
+        result = Scopes::UseCases::Add
+                   .new(storage: scope_storage)
+                   .call(
+                     kind:        params[:kind],
+                     value:       params[:value],
+                     caller_role: :admin,
+                     caller_id:   caller_id
+                   )
+        case result.status
+        when :created
+          { ok: true, scope: result.body[:scope] }
+        when :bad_request
+          { ok: false, error: "invalid_param", message: result.body[:error] }
+        else
+          { ok: false, error: result.body.is_a?(Hash) ? result.body[:error] : "unknown" }
+        end
+      end
+
+      # revoke_scope : marque une entree de scope comme revoked. La
+      # cible (id) doit exister, sinon on renvoie un not_found explicite.
+      #
+      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md.
+      ToolRegistry.register(
+        name:   "revoke_scope",
+        scopes: [:"write:scopes"],
+        params_schema: {
+          id: { type: :string, min_length: 1, max_length: 64 }
+        }
+      ) do |params:, caller_id:|
+        result = Scopes::UseCases::Revoke
+                   .new(storage: scope_storage)
+                   .call(
+                     id:          params[:id],
+                     caller_role: :admin,
+                     caller_id:   caller_id
+                   )
+        case result.status
+        when :no_content
+          { ok: true, id: params[:id] }
+        when :not_found
+          { ok: false, error: "scope_not_found", id: params[:id] }
+        else
+          { ok: false, error: result.body.is_a?(Hash) ? result.body[:error] : "unknown" }
+        end
+      end
+
       # request_scan : valide le scope, enqueue un job ScanJobV1 dans la
       # file (GoodJob en prod, InMemory en tests). Renvoie le scan_id en
       # < 100 ms (l'enqueue est synchrone, le scan est asynchrone).
