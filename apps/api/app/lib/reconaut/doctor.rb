@@ -60,7 +60,11 @@ module Reconaut
       rails_version:           ->(_) { defined?(Rails) ? Rails.version : nil },
       good_jobs_pending:       ->(_) { nil },
       schema_versions:         ->(_) { safe_schema_versions },
-      last_worker_heartbeat:   ->(_) { nil }
+      last_worker_heartbeat:   ->(_) { nil },
+      # Probe d'intégration entrante : vérifie que le tool MCP
+      # `ingest_scan_result` est bien enregistré au boot. Cf. change
+      # `reposition-as-agent-knowledge-base` §4.4.
+      ingest_tool_registered?: ->(_) { defined?(Mcp::ToolRegistry) && Mcp::ToolRegistry.names.include?("ingest_scan_result") }
     }.freeze
 
     module_function
@@ -88,6 +92,7 @@ module Reconaut
       checks << check_good_jobs(probes, ctx)
       checks << check_schema_versions(probes, ctx)
       checks << check_last_worker(probes, ctx)
+      checks << check_ingestion_endpoint(probes, ctx)
 
       # ok = aucun :fail. Les statuts :info (provider externe configure)
       # et :unknown (lag pas encore mesure, normal au boot) sont
@@ -218,6 +223,28 @@ module Reconaut
           name:    "last_worker_heartbeat",
           status:  :info,
           details: "worker_version=#{worker_version || 'n/a'}, schema_version=#{schema_version || 'n/a'}, seen_at=#{seen_at || 'n/a'}"
+        )
+      end
+    end
+
+    # Vérifie que le tool MCP `ingest_scan_result` est bien enregistré
+    # au boot. Statut `:info` (présent) ou `:unknown` (registry vide,
+    # par ex. en test isolé). Pas de `:fail` : un opérateur peut
+    # délibérément ne pas exposer le tool d'ingestion (clé full-scope
+    # personnelle uniquement).
+    def check_ingestion_endpoint(probes, ctx)
+      registered = probes[:ingest_tool_registered?].call(ctx)
+      if registered
+        Check.new(
+          name:    "ingestion_endpoint_reachable",
+          status:  :info,
+          details: "tool MCP `ingest_scan_result` enregistré"
+        )
+      else
+        Check.new(
+          name:    "ingestion_endpoint_reachable",
+          status:  :unknown,
+          details: "tool MCP `ingest_scan_result` non enregistré (registry vide ?)"
         )
       end
     end

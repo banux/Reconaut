@@ -1,18 +1,20 @@
 # Reconaut — Contexte projet
 
-Reconaut est un **outil open source auto-hébergeable** d'Attack Surface Management : il scanne le périmètre d'actifs internet **explicitement déclaré par l'opérateur** (CIDR, domaines, hôtes), avec l'IA comme capacité de premier ordre — pas un ajout cosmétique. Pas de balayage du grand internet, pas de collecte de données sur des tiers non consentants : l'opérateur ne scanne que ce qu'il possède ou contrôle.
+Reconaut est une **base de connaissance d'actifs internet** open source, auto-hébergeable, **conçue pour les agents IA** : l'opérateur déclare explicitement le périmètre qu'il possède ou contrôle (CIDR, domaines, hôtes) ; Reconaut maintient un **graphe d'actifs scopé** alimenté par scans internes ET ingestion de scanners externes ; et il expose ce graphe via MCP HTTP+SSE pour que des agents IA (Reconaut's own agent + agents externes type Claude / GPT / agents maison) le consomment comme **source faisant autorité** dans leur raisonnement. Pas de balayage du grand internet, pas de collecte de données sur des tiers non consentants.
 
 ## Positionnement
 
+- **Base de connaissance pour agents IA.** Reconaut n'est pas un produit autonome de scan-puis-rapport ; c'est un **composant intégrable** dans la stack sécurité de l'opérateur. Le persona principal est l'opérateur qui orchestre des agents IA contre sa surface d'attaque et veut leur donner une source d'autorité partagée.
 - **Open source, auto-hébergeable.** Reconaut est une **base de connaissance d'actifs internet** maintenue par son opérateur, queryable par ses agents IA et intégrable à sa stack sécurité. **Mono-user** par construction : une instance = un opérateur = un périmètre d'actifs. Un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances.
 - **Scope-driven.** Le scanner refuse par construction de scanner une cible hors de la liste d'autorisation déclarée par l'opérateur. Pas de découverte du grand internet « à la Shodan ».
 - **Boundary RGPD claire.** L'opérateur est le responsable de traitement (controller). Reconaut fournit les outils pour qu'il tienne ses obligations (journal d'audit, effacement, résidence configurable), mais ne porte pas la responsabilité de conformité à sa place.
 
 ## Différenciateurs
 
+- **Base de connaissance MCP-first pour agents IA** — graphe d'actifs queryable structurellement (Apache AGE) ET sémantiquement (pgvector + embedder pluggable). Le canal canonique de consommation est le serveur MCP HTTP+SSE intégré au process Rails. La TUI `reconautctl`, les agents IA externes et tout client (CI scripts, intégrations) consomment **le même périmètre d'outils MCP** avec la même clé API personnelle. L'API REST se réduit à l'auth bootstrap, au healthcheck et au transport MCP lui-même (cf. change `mcp-as-primary-entrypoint`).
+- **Intégration entrante et sortante de première classe.** Entrée : tool MCP `ingest_scan_result` qui accepte des résultats de scanners externes (nmap, OpenVAS, Nuclei, exports Censys/Shodan…) au format `ScanResultV1`, ingérés via la même couche que les workers internes. Sortie : outils MCP de lecture (`search_hosts`, `get_host`, `list_scans`, `export_report`) + futurs webhooks/SIEM. Reconaut est un citoyen de la stack, pas un silo.
 - **Optimisation des scans pilotée par IA** — planification adaptative pondérée par taux de churn, criticité déclarée par l'opérateur et fraîcheur ; détection d'anomalies sur les profils de services par hôte.
 - **Interface agent conversationnelle** — recherche en langage naturel sur le jeu de données indexé, propulsée par une couche d'embeddings **pluggable** (défaut self-hostable ; Mistral / OpenAI-compatible disponible si l'opérateur le configure).
-- **Serveur MCP comme point d'entrée principal** — le transport MCP HTTP+SSE intégré au process Rails est le canal opérateur primaire. La TUI `reconautctl`, les agents IA externes et tout client (CI scripts, intégrations) consomment **le même périmètre d'outils MCP** avec la même clé API personnelle. L'API REST se réduit à l'auth bootstrap, au healthcheck et au transport MCP lui-même (cf. change `mcp-as-primary-entrypoint`).
 - **Auto-hébergement sans condition.** Aucune fonctionnalité critique du produit ne dépend d'un service propriétaire externe. Tout ce qui est externe (LLM, IdP) est substituable et l'opérateur peut tourner 100 % en réseau privé.
 
 ## Stack

@@ -108,6 +108,9 @@ Detail complet : [`openspec/project.md`](openspec/project.md).
 
 ## Documentation
 
+- [`docs/positioning/agent-knowledge-base.md`](docs/positioning/agent-knowledge-base.md)
+  - vision produit : Reconaut = base de connaissance pour agents IA,
+    composant de la stack securite (entree + sortie MCP).
 - [`docs/adr/0001-license.md`](docs/adr/0001-license.md)
   - decision AGPL-3.0-only et alternatives ecartees.
 - [`docs/architecture/mcp-first.md`](docs/architecture/mcp-first.md)

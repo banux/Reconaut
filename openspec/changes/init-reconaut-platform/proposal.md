@@ -34,6 +34,7 @@ Il amorce aussi `openspec/project.md` pour que les changes futurs partagent un d
 - **Désanonymisation de masse**, scan au-delà de barrières authentifiées sans autorisation.
 - **Clients mobiles** en v1.
 - **Distribution SaaS multi-tenant gérée par le projet** — l'OSS est self-hosted. Un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances ; toute distribution managée par un tiers est extérieure au projet.
+- **Produit autonome de scan-puis-rapport.** Reconaut n'est pas un dashboard SOC autonome. C'est un **composant** de la stack sécurité de l'opérateur, intégré via MCP avec ses agents IA et avec d'autres outils (entrée : ingestion de scanners externes via `ingest_scan_result` ; sortie : MCP, futurs webhooks). Cf. change `reposition-as-agent-knowledge-base`.
 - **Mode multi-tenant en v1** — Reconaut est tenant unique par construction. Aucune colonne `tenant_id`, aucune RLS par tenant. Si un besoin émerge, ce sera l'objet d'un change ultérieur dédié.
 - **Facturation, abonnements, métering commercial.** Hors scope définitif.
 - **Stockage objet S3-compatible** (S3, MinIO, etc.) — exclu en v1, filesystem local ou Postgres pour les artefacts.
