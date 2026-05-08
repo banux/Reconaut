@@ -26,7 +26,8 @@ module Mcp
       :"read:scans", :"write:scans",
       :"read:reports", :"agent:chat",
       :"read:api_keys", :"write:api_keys",
-      :"read:health", :"manage:scopes"
+      :"read:health", :"manage:scopes",
+      :"write:heartbeats"
     ].freeze
 
     SCOPES_BY_ROLE = {
