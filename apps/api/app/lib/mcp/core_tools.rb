@@ -81,15 +81,10 @@ module Mcp
         { scopes: scopes }
       end
 
-      # add_scope : ajoute une entree de scope (cidr / domain / ip / host)
-      # via le use case Scopes::UseCases::Add. La verification RBAC est
-      # double : l'allowlist MCP write:scopes filtre deja les viewers,
-      # le use case re-verifie en passant caller_role: :admin (pris pour
-      # garanti puisque write:scopes implique au moins admin dans la
-      # matrice mcp-server).
-      #
-      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md
-      # (Requirement: MCP Tool Surface, scope write:scopes).
+      # add_scope : ajoute une entrée de scope (cidr / domain / ip / host)
+      # via le use case Scopes::UseCases::Add. Le contrôle d'accès est
+      # porté par le scope MCP `write:scopes` ; le use case ne vérifie
+      # plus de rôle (cf. openspec/changes/single-user-only/).
       ToolRegistry.register(
         name:   "add_scope",
         scopes: [:"write:scopes"],
@@ -101,10 +96,9 @@ module Mcp
         result = Scopes::UseCases::Add
                    .new(storage: scope_storage)
                    .call(
-                     kind:        params[:kind],
-                     value:       params[:value],
-                     caller_role: :admin,
-                     caller_id:   caller_id
+                     kind:      params[:kind],
+                     value:     params[:value],
+                     caller_id: caller_id
                    )
         case result.status
         when :created
@@ -116,10 +110,7 @@ module Mcp
         end
       end
 
-      # revoke_scope : marque une entree de scope comme revoked. La
-      # cible (id) doit exister, sinon on renvoie un not_found explicite.
-      #
-      # Cf. openspec/changes/mcp-as-primary-entrypoint/specs/mcp-server/spec.md.
+      # revoke_scope : marque une entrée de scope comme revoked.
       ToolRegistry.register(
         name:   "revoke_scope",
         scopes: [:"write:scopes"],
@@ -130,9 +121,8 @@ module Mcp
         result = Scopes::UseCases::Revoke
                    .new(storage: scope_storage)
                    .call(
-                     id:          params[:id],
-                     caller_role: :admin,
-                     caller_id:   caller_id
+                     id:        params[:id],
+                     caller_id: caller_id
                    )
         case result.status
         when :no_content

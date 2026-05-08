@@ -10,7 +10,6 @@ module Scopes
         created:      201,
         no_content:   204,
         bad_request:  400,
-        unauthorized: 403,
         not_found:    404
       }.freeze
 
@@ -19,25 +18,20 @@ module Scopes
       end
     end
 
-    # En mode mono-user (cf. openspec/changes/single-user-only/), il
-    # n'y a qu'un seul rôle effectif `:operator` qui a tous les droits.
-    # Les anciens rôles (viewer/analyst/admin/owner/mcp_client) sont
-    # conservés transitoirement pour ne pas casser les controllers
-    # hérités qui les passent encore. À retirer dans §2.2 du change
-    # single-user-only quand les use cases perdront caller_role:.
-    READ_ROLES  = %i[operator viewer analyst admin owner mcp_client].freeze
-    WRITE_ROLES = %i[operator admin owner].freeze
+    # En mode mono-user (cf. openspec/changes/single-user-only/), il n'y
+    # a plus de notion de rôle. Le contrôle d'accès vit (a) au niveau
+    # MCP scope (Mcp::Tool#call vérifie `caller_scopes`), et (b) à
+    # l'authentification (la présence d'une clé API valide). Les use
+    # cases ne ré-implémentent plus la matrice — ils prennent juste
+    # `caller_id:` pour l'audit.
 
     class List
       def initialize(storage:)
         @storage = storage
       end
 
-      def call(caller_role:)
-        unless READ_ROLES.include?(caller_role)
-          return Result.new(status: :unauthorized, body: { error: "rbac_forbidden" })
-        end
-
+      def call(caller_id: "anonymous")
+        _ = caller_id # réservé à l'audit éventuel ; la lecture n'est pas auditée
         Result.new(
           status: :ok,
           body: { scopes: @storage.list.map(&:to_h) }
@@ -51,12 +45,7 @@ module Scopes
         @audit   = audit_recorder
       end
 
-      def call(kind:, value:, caller_role:, caller_id: "anonymous")
-        unless WRITE_ROLES.include?(caller_role)
-          record_audit(:unauthorized, caller_id, kind: kind, value: value)
-          return Result.new(status: :unauthorized, body: { error: "rbac_forbidden" })
-        end
-
+      def call(kind:, value:, caller_id: "anonymous")
         begin
           scope = @storage.create(kind: kind, value: value)
         rescue ArgumentError => e
@@ -68,7 +57,6 @@ module Scopes
         end
 
         record_audit(:success, caller_id, kind: kind, value: value, scope_id: scope.id)
-
         Result.new(status: :created, body: { scope: scope.to_h })
       end
 
@@ -86,7 +74,7 @@ module Scopes
           nodes_touched: 0
         )
       rescue StandardError
-        # ne fait jamais echouer le use case
+        # ne fait jamais échouer le use case
       end
     end
 
@@ -96,12 +84,7 @@ module Scopes
         @audit   = audit_recorder
       end
 
-      def call(id:, caller_role:, caller_id: "anonymous")
-        unless WRITE_ROLES.include?(caller_role)
-          record_audit(:unauthorized, caller_id, scope_id: id)
-          return Result.new(status: :unauthorized, body: { error: "rbac_forbidden" })
-        end
-
+      def call(id:, caller_id: "anonymous")
         scope = @storage.delete(id)
         if scope.nil?
           record_audit(:param_invalid, caller_id, scope_id: id, code: "not_found")

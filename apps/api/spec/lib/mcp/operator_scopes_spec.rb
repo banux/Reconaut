@@ -2,10 +2,14 @@
 
 require "rails_helper"
 
-# Vérifie que la matrice OPERATOR_SCOPES couvre toutes les scopes
-# requises par les outils du registry. C'est un contrat structurel :
-# si un nouvel outil MCP introduit un scope qui n'est pas dans
-# OPERATOR_SCOPES, l'opérateur unique ne pourrait pas l'invoquer.
+# Vérifie que le set OPERATOR_SCOPES couvre tous les scopes requis par
+# les outils du registry. Contrat structurel : si un nouvel outil MCP
+# introduit un scope absent du set par défaut d'une clé full-scope,
+# l'opérateur unique ne pourrait pas l'invoquer.
+#
+# Cf. openspec/changes/single-user-only/specs/mcp-server/spec.md
+# (la matrice ne fait plus référence à un rôle ; elle se réduit au
+# set de scopes attaché à chaque clé API).
 RSpec.describe Mcp::ToolsController do
   let(:registry) { Reconaut::Registry.default }
 
@@ -21,11 +25,11 @@ RSpec.describe Mcp::ToolsController do
     }.new(response)
 
     Mcp::CoreTools.register_all!(
-      retriever:          retriever,
-      scope_storage:      registry.scope_storage,
-      scan_enqueuer:      registry.scan_enqueuer,
-      api_key_storage:    registry.api_key_store,
-      heartbeat_store:    registry.heartbeat_store
+      retriever:        retriever,
+      scope_storage:    registry.scope_storage,
+      scan_enqueuer:    registry.scan_enqueuer,
+      api_key_storage:  registry.api_key_store,
+      heartbeat_store:  registry.heartbeat_store
     )
   end
 
@@ -40,14 +44,15 @@ RSpec.describe Mcp::ToolsController do
     missing  = required - operator
     expect(missing).to be_empty,
                        "OPERATOR_SCOPES manque : #{missing.inspect}. " \
-                       "Ajouter ces scopes à #{described_class}::OPERATOR_SCOPES."
+                       "Ajouter ces scopes à InMemoryApiKeys::DEFAULT_SCOPES."
   end
 
   it "OPERATOR_SCOPES inclut write:heartbeats (cf. submit_heartbeat tool)" do
     expect(described_class::OPERATOR_SCOPES).to include(:"write:heartbeats")
   end
 
-  it "SCOPES_BY_ROLE[:operator] est égal à OPERATOR_SCOPES" do
-    expect(described_class::SCOPES_BY_ROLE[:operator]).to eq(described_class::OPERATOR_SCOPES)
+  it "OPERATOR_SCOPES est exactement le set DEFAULT_SCOPES de InMemoryApiKeys" do
+    expect(described_class::OPERATOR_SCOPES)
+      .to eq(Reconaut::Auth::Storage::InMemoryApiKeys::DEFAULT_SCOPES)
   end
 end

@@ -1,33 +1,39 @@
 # frozen_string_literal: true
 
 module Auth
-  # POST   /auth/api_keys             : cree une cle API pour l'identite
-  #                                     authentifiee. Renvoie le raw token
-  #                                     UNE SEULE FOIS.
-  # GET    /auth/api_keys             : liste les cles (sans token).
-  # DELETE /auth/api_keys/:id         : revoque une cle.
+  # POST   /auth/api_keys           : crée une clé API personnelle pour
+  #                                   l'opérateur unique. Renvoie le raw
+  #                                   token UNE SEULE FOIS. Accepte un
+  #                                   set `scopes:` optionnel ; à défaut
+  #                                   la clé reçoit le set complet
+  #                                   (DEFAULT_SCOPES).
+  # GET    /auth/api_keys           : liste les clés (sans token).
+  # DELETE /auth/api_keys/:id       : révoque une clé.
   #
-  # Acces restreint au porteur d'une identite valide (auth via Bearer ou
-  # session). Le concern RoleResolver fournit `current_identity`.
+  # Accès restreint au porteur d'une identité valide (auth via Bearer).
+  # Le concern IdentityResolver fournit `current_identity` (cf. mono-user,
+  # openspec/changes/single-user-only/).
   class ApiKeysController < ApplicationController
-    include RoleResolver
+    include IdentityResolver
 
     before_action :require_authenticated!
 
     def index
-      keys = Reconaut::Registry.default.api_key_store.list_for(current_identity.user.id)
+      keys = Reconaut::Registry.default.api_key_store.list
       render json: { api_keys: keys.map(&:to_h) }
     end
 
     def create
-      issued = Reconaut::Registry.default.authenticator
-        .issue_api_key(user_id: current_identity.user.id)
+      requested_scopes = Array(params[:scopes]).compact.map(&:to_s)
+      issued = Reconaut::Registry.default.authenticator.issue_api_key(
+        scopes: requested_scopes.empty? ? nil : requested_scopes
+      )
       render status: :created, json: { api_key: issued }
     end
 
     def destroy
       store = Reconaut::Registry.default.api_key_store
-      key = store.list_for(current_identity.user.id).find { |k| k.id == params[:id] }
+      key = store.list.find { |k| k.id == params[:id] }
       return head :not_found unless key
 
       store.revoke!(key.id)

@@ -49,7 +49,7 @@ RSpec.describe "MCP request_scan", type: :request do
           target_kind: "ip",
           target_value: "8.8.8.8"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "admin" }
+        headers: { "Content-Type" => "application/json",  }
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body, symbolize_names: true)
@@ -70,7 +70,7 @@ RSpec.describe "MCP request_scan", type: :request do
           target_kind: "ip",
           target_value: "192.0.2.1"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "admin" }
+        headers: { "Content-Type" => "application/json",  }
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body, symbolize_names: true)
@@ -83,42 +83,37 @@ RSpec.describe "MCP request_scan", type: :request do
     end
   end
 
-  describe "RBAC : write:scans" do
+  describe "RBAC par scope (mono-user)" do
     before { storage.create(kind: "ip", value: "192.0.2.1") }
 
-    it "rejette viewer (pas write:scans) avec 403" do
+    it "rejette une clé sans write:scans avec 403" do
+      _, raw = registry.api_key_store.create_for(scopes: [:"read:hosts"])
+
       post "/mcp/tools/request_scan",
-        params: {
+        params:  {
           scan_kind: "tcp_probe", target_kind: "ip", target_value: "192.0.2.1"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "viewer" }
+        headers: {
+          "Content-Type" => "application/json",
+          "Authorization" => "Bearer #{raw}"
+        }
 
       expect(response).to have_http_status(:forbidden)
       expect(JSON.parse(response.body)["error"]).to eq("rbac_forbidden")
     end
 
-    it "rejette analyst (pas write:scans) avec 403" do
+    it "autorise une clé avec write:scans" do
+      _, raw = registry.api_key_store.create_for(scopes: [:"write:scans"])
+
       post "/mcp/tools/request_scan",
-        params: {
+        params:  {
           scan_kind: "tcp_probe", target_kind: "ip", target_value: "192.0.2.1"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "analyst" }
-
-      expect(response).to have_http_status(:forbidden)
-    end
-
-    it "autorise admin et owner" do
-      Mcp::CoreTools.register_all!(retriever: retriever, scope_storage: storage,
-                                   scan_enqueuer: registry.scan_enqueuer)
-
-      %w[admin owner].each do |role|
-        post "/mcp/tools/request_scan",
-          params: {
-            scan_kind: "tcp_probe", target_kind: "ip", target_value: "192.0.2.1"
-          }.to_json,
-          headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => role }
-        expect(response).to have_http_status(:ok), "role=#{role} got #{response.status}"
-      end
+        headers: {
+          "Content-Type" => "application/json",
+          "Authorization" => "Bearer #{raw}"
+        }
+      expect(response).to have_http_status(:ok)
     end
   end
 
@@ -130,7 +125,7 @@ RSpec.describe "MCP request_scan", type: :request do
         params: {
           scan_kind: "icmp_flood", target_kind: "ip", target_value: "192.0.2.1"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "admin" }
+        headers: { "Content-Type" => "application/json",  }
 
       expect(response).to have_http_status(:bad_request)
       expect(JSON.parse(response.body)["error"]).to eq("param_invalid")
@@ -141,7 +136,7 @@ RSpec.describe "MCP request_scan", type: :request do
         params: {
           scan_kind: "tcp_probe", target_kind: "person", target_value: "alice"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "admin" }
+        headers: { "Content-Type" => "application/json",  }
 
       expect(response).to have_http_status(:bad_request)
     end
@@ -149,7 +144,7 @@ RSpec.describe "MCP request_scan", type: :request do
     it "400 missing_param sur target_value absent" do
       post "/mcp/tools/request_scan",
         params: { scan_kind: "tcp_probe", target_kind: "ip" }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "admin" }
+        headers: { "Content-Type" => "application/json",  }
 
       expect(response).to have_http_status(:bad_request)
       expect(JSON.parse(response.body)["error"]).to eq("missing_param")
@@ -168,7 +163,7 @@ RSpec.describe "MCP request_scan", type: :request do
         params: {
           scan_kind: "tcp_probe", target_kind: "ip", target_value: "192.0.2.1"
         }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "admin" }
+        headers: { "Content-Type" => "application/json",  }
       elapsed_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000
 
       expect(response).to have_http_status(:ok)

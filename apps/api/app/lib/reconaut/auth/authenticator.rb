@@ -48,6 +48,13 @@ module Reconaut
       # Resolution depuis une requete HTTP. `auth_header` est la valeur
       # brute de `Authorization` (peut etre nil ou "Bearer <token>").
       # Retourne nil si aucune identite ne peut etre etablie.
+      # En mode mono-user (cf. openspec/changes/single-user-only/), il
+      # n'y a qu'un seul opérateur implicite. Le lookup user est un
+      # service de confort (pour l'audit affichage), pas un gate
+      # d'auth — la validation de la clé suffit. Si aucun user n'est
+      # enregistré (instance fraîchement bootstrappée), on retourne
+      # quand même une Identity avec un user "implicite" pour ne pas
+      # casser les chemins audit.
       def from_authorization(auth_header)
         return nil if auth_header.to_s.empty?
 
@@ -58,8 +65,8 @@ module Reconaut
         key = @keys.find_by_token(raw)
         return nil if key.nil? || key.revoked?
 
-        user = @users.find(key.user_id)
-        return nil if user.nil? || user.disabled?
+        user = @users.list.first || implicit_operator
+        return nil if user.respond_to?(:disabled?) && user.disabled?
 
         Identity.new(user: user, api_key: key, source: :api_key)
       end
@@ -103,12 +110,33 @@ module Reconaut
         Identity.new(user: user, api_key: nil, source: :password)
       end
 
-      def issue_api_key(user_id:)
-        record, raw = @keys.create_for(user_id: user_id)
-        { id: record.id, prefix: record.prefix, token: raw, created_at: record.created_at }
+      def issue_api_key(user_id: Reconaut::Auth::OPERATOR_ID, scopes: nil)
+        kwargs = { user_id: user_id }
+        kwargs[:scopes] = scopes if scopes
+        record, raw = @keys.create_for(**kwargs)
+        {
+          id:         record.id,
+          prefix:     record.prefix,
+          scopes:     record.scopes.map(&:to_s),
+          token:      raw,
+          created_at: record.created_at
+        }
       end
 
       private
+
+      # Opérateur implicite : utilisé quand aucun User n'a encore été
+      # créé en base mais que la clé est valide (cas pathologique mais
+      # pas bloquant — l'audit retombe sur key:<prefix>).
+      def implicit_operator
+        @implicit_operator ||= User.new(
+          id:            Reconaut::Auth::OPERATOR_ID,
+          email:         "operator@local",
+          password_hash: nil,
+          created_at:    Time.now.utc.iso8601,
+          disabled_at:   nil
+        )
+      end
 
       # Hash d'un faux mot de passe garde en cache pour egaliser le cout
       # CPU des branches "user trouve" / "user inexistant".

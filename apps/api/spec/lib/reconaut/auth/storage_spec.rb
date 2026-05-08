@@ -55,11 +55,23 @@ RSpec.describe Reconaut::Auth::Storage do
     subject(:store) { described_class.new }
 
     it "create_for renvoie [record, raw] avec hash sha256 du raw" do
-      record, raw = store.create_for(user_id: "u-1")
+      record, raw = store.create_for
       expect(raw).to match(/\A[A-Za-z0-9_-]{30,}\z/)
       expect(record.token_hash).to eq(Digest::SHA256.hexdigest(raw))
       expect(record.prefix).to eq(raw[0, 8])
-      expect(record.user_id).to eq("u-1")
+      # En mono-user, user_id est figé à OPERATOR_ID.
+      expect(record.user_id).to eq(Reconaut::Auth::OPERATOR_ID)
+    end
+
+    it "create_for accepte un set de scopes explicite (clé scopée)" do
+      record, _ = store.create_for(scopes: [:"read:hosts", :"read:scans"])
+      expect(record.scopes).to eq([:"read:hosts", :"read:scans"])
+    end
+
+    it "create_for sans scopes attribue le set DEFAULT_SCOPES (full-scope)" do
+      record, _ = store.create_for
+      expect(record.scopes).to eq(described_class::DEFAULT_SCOPES)
+      expect(record.to_h[:scopes]).to be_an(Array)
     end
 
     it "find_by_token retrouve la cle a partir du raw" do
@@ -73,23 +85,29 @@ RSpec.describe Reconaut::Auth::Storage do
       expect(store.find_by_token("")).to be_nil
     end
 
-    it "list_for filtre par user_id" do
-      _, _ = store.create_for(user_id: "u-1")
-      _, _ = store.create_for(user_id: "u-2")
-      _, _ = store.create_for(user_id: "u-1")
-      expect(store.list_for("u-1").size).to eq(2)
-      expect(store.list_for("u-2").size).to eq(1)
+    it "list renvoie toutes les cles (mono-user, plus de filtrage user_id)" do
+      3.times { store.create_for }
+      expect(store.list.size).to eq(3)
     end
 
     it "revoke! marque la cle comme revoquee" do
-      record, raw = store.create_for(user_id: "u-1")
+      record, raw = store.create_for
       store.revoke!(record.id)
       found = store.find_by_token(raw)
       expect(found.revoked?).to be true
     end
 
+    it "revoke_all! revoque toutes les cles non revoquees" do
+      r1, _ = store.create_for
+      r2, _ = store.create_for
+      store.revoke_all!
+      remaining = store.list
+      expect(remaining.all?(&:revoked?)).to be true
+      expect(remaining.map(&:id)).to include(r1.id, r2.id)
+    end
+
     it "ApiKey#to_h n'expose JAMAIS le token_hash" do
-      record, _raw = store.create_for(user_id: "u-1")
+      record, _raw = store.create_for
       expect(record.to_h).not_to have_key(:token_hash)
     end
   end

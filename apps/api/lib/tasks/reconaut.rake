@@ -73,13 +73,15 @@ namespace :reconaut do
     exit report.exit_code
   end
 
-  desc "Pose le password de l'opérateur unique. Idempotent : refuse si un user existe deja. " \
-       "Lit RECONAUT_OPERATOR_PASSWORD (et RECONAUT_OPERATOR_EMAIL en option, défaut 'operator@local')."
+  desc "Pose le password de l'opérateur unique. Idempotent : refuse si un user existe " \
+       "deja sauf si RECONAUT_ROTATE=true (qui rote le password ET révoque toutes les " \
+       "clés API existantes). Lit RECONAUT_OPERATOR_PASSWORD."
   task set_password: :environment do
     require "reconaut/auth/bootstrap"
 
     email    = ENV["RECONAUT_OPERATOR_EMAIL"].to_s.strip
     password = ENV["RECONAUT_OPERATOR_PASSWORD"].to_s
+    rotate   = %w[true 1 yes].include?(ENV["RECONAUT_ROTATE"].to_s.downcase)
 
     if password.empty?
       warn "RECONAUT_OPERATOR_PASSWORD required"
@@ -89,15 +91,22 @@ namespace :reconaut do
     email = Reconaut::Auth::Bootstrap::DEFAULT_OPERATOR_EMAIL if email.empty?
 
     begin
-      result = Reconaut::Auth::Bootstrap.call(email: email, password: password)
+      result = Reconaut::Auth::Bootstrap.call(
+        email:    email,
+        password: password,
+        rotate:   rotate
+      )
     rescue Reconaut::Auth::Bootstrap::AlreadyInitializedError => e
       warn "bootstrap-already-initialized: #{e.message}"
+      warn "Ajoutez RECONAUT_ROTATE=true pour roter le password " \
+           "(révoque toutes les clés API existantes)."
       exit 65 # EX_DATAERR
     end
 
     payload = {
       user:    result[:user].to_h,
-      api_key: result[:api_key]
+      api_key: result[:api_key],
+      rotated: result[:rotated]
     }
     puts JSON.pretty_generate(payload)
     warn "WARNING: l'API key affichee ci-dessus n'est plus consultable. " \

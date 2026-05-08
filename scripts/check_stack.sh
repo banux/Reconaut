@@ -100,6 +100,21 @@ if [[ -d apps/scanner ]] && [[ -f apps/scanner/go.mod ]]; then
   fi
 fi
 
+# --- mono-user : pas d'OIDC, pas de nouveau rôle multi-utilisateur --------
+# Cf. openspec/changes/single-user-only/ : Reconaut est mono-user en v1.
+# Pas de gem OIDC (omniauth-oidc, openid_connect, doorkeeper-openid_connect).
+# Pas de réintroduction d'un système de rôles dans le code applicatif.
+if [[ -f apps/api/Gemfile ]]; then
+  if grep -iE '^\s*gem\s+["'"'"'](omniauth-oidc|openid_connect|doorkeeper-openid_connect|omniauth)["'"'"']' apps/api/Gemfile >/dev/null 2>&1; then
+    fail "apps/api/Gemfile reintroduit une dependance OIDC ; Reconaut est mono-user (cf. single-user-only)"
+  fi
+fi
+if [[ -d apps/api/app/controllers ]]; then
+  if grep -RIlE "VALID_ROLES|READ_ROLES|WRITE_ROLES|AUTHORIZED_ROLES|RoleResolver" apps/api/app/ apps/api/lib/ 2>/dev/null | grep -q .; then
+    fail "code applicatif reintroduit une constante de roles (VALID_ROLES / READ_ROLES / etc.) ; Reconaut est mono-user"
+  fi
+fi
+
 # --- positionnement narratif : pas de mention MSSP -------------------------
 # cf. openspec/changes/reposition-as-agent-knowledge-base/ qui retire
 # l'objectif MSSP du perimetre produit. Allowlist : le change qui retire

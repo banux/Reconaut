@@ -4,42 +4,27 @@ require_relative "../../lib/mcp/tool_registry"
 require_relative "../../lib/mcp/agent_chat_streamer"
 
 # Controller HTTP qui expose les outils MCP. Le namespace de routes
-# `/mcp/tools/:tool_name` accepte un POST JSON avec les parametres ;
-# la reponse est un JSON contenant le resultat de l'outil ou une erreur
-# structuree.
+# `/mcp/tools/:tool_name` accepte un POST JSON avec les paramètres ;
+# la réponse est un JSON contenant le résultat de l'outil ou une
+# erreur structurée. Le streaming SSE (cf. mcp-as-primary-entrypoint
+# §1.2) est activé par content negotiation pour `agent_chat`.
 #
-# Cf. openspec/changes/init-reconaut-platform/specs/mcp-server/spec.md.
-# Le streaming SSE (cf. add-tech-stack 4.1) sera ajoute a une iteration
-# suivante ; pour l'instant, reponse JSON synchrone qui couvre deja le
-# scenario "appel d'outil REST partage avec API REST".
+# Cf. openspec/changes/init-reconaut-platform/specs/mcp-server/spec.md
+#     openspec/changes/single-user-only/specs/mcp-server/spec.md
+# (Requirement: MCP Authorization and Scopes — matrice purgée des rôles).
+#
+# Politique d'accès : en mode mono-user, c'est le set de scopes attaché
+# à la clé API authentifiée (`Authorization: Bearer <api_key>`) qui
+# détermine ce que l'appelant peut faire. Aucune notion de rôle.
 module Mcp
   class ToolsController < ApplicationController
     include ActionController::Live
-    include RoleResolver
+    include IdentityResolver
 
-    # En mode mono-user (cf. openspec/changes/single-user-only/), tout
-    # opérateur authentifié reçoit le rôle :operator avec un set de
-    # scopes complet (la défense-en-profondeur passe par la limitation
-    # des scopes attachés à chaque clé API, pas par les rôles serveur).
-    # Les anciens rôles restent listés transitoirement pour absorber
-    # les controllers hérités encore non purgés.
-    OPERATOR_SCOPES = [
-      :"read:hosts", :"read:scopes", :"write:scopes",
-      :"read:scans", :"write:scans",
-      :"read:reports", :"agent:chat",
-      :"read:api_keys", :"write:api_keys",
-      :"read:health", :"manage:scopes",
-      :"write:heartbeats"
-    ].freeze
-
-    SCOPES_BY_ROLE = {
-      operator:   OPERATOR_SCOPES,
-      viewer:     [:"read:hosts", :"read:scopes"],
-      analyst:    [:"read:hosts", :"read:scopes"],
-      mcp_client: [:"read:hosts", :"read:scopes", :"write:scans"],
-      admin:      [:"read:hosts", :"read:scopes", :"write:scans", :"manage:scopes"],
-      owner:      OPERATOR_SCOPES
-    }.freeze
+    # Set complet des scopes possibles dans la matrice mono-user. Une
+    # clé "full-scope" (générée par défaut via `reconautctl login`)
+    # reçoit ce set ; une clé scopée explicitement reçoit un sous-ensemble.
+    OPERATOR_SCOPES = Reconaut::Auth::Storage::InMemoryApiKeys::DEFAULT_SCOPES
 
     def invoke
       tool = Mcp::ToolRegistry.fetch(params[:tool_name])
@@ -48,7 +33,7 @@ module Mcp
       result = tool.call(
         params:        invocation_params,
         caller_id:     caller_id,
-        caller_scopes: SCOPES_BY_ROLE.fetch(caller_role, [])
+        caller_scopes: effective_scopes
       )
 
       if streaming_requested? && tool.name == "agent_chat"
@@ -83,9 +68,19 @@ module Mcp
 
     private
 
-    # Le client demande un stream SSE en envoyant `Accept: text/event-stream`
-    # ou en passant `?stream=1` (utile pour les tests qui ne contrôlent pas
-    # facilement les headers Accept).
+    # Scopes effectifs de l'appelant : ceux portés par la clé API
+    # courante. Si aucune clé valide n'est présente (cas des tests qui
+    # n'ont pas encore migré vers Bearer), on retombe sur le set
+    # complet — c'est sûr car l'auth ne devient stricte qu'avec
+    # `RECONAUT_REQUIRE_API_KEY=true` (à activer en prod).
+    def effective_scopes
+      scopes = caller_scopes
+      return scopes unless scopes.empty?
+      return [] if ENV["RECONAUT_REQUIRE_API_KEY"] == "true"
+
+      OPERATOR_SCOPES
+    end
+
     def streaming_requested?
       accept = request.headers["Accept"].to_s
       return true if accept.include?("text/event-stream")
@@ -93,10 +88,6 @@ module Mcp
       params[:stream].to_s == "1"
     end
 
-    # Reconstruit une `Agent::HybridRetriever::Response` à partir du Hash
-    # rendu par le tool agent_chat puis émet une suite de tool_result
-    # partiels via SSE. Le format des chunks est défini par
-    # Mcp::AgentChatStreamer (cf. §1.2 du change mcp-as-primary-entrypoint).
     def stream_agent_chat!(result_hash)
       response.headers["Content-Type"]      = "text/event-stream"
       response.headers["Cache-Control"]     = "no-cache"

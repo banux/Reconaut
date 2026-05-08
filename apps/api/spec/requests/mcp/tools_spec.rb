@@ -159,21 +159,33 @@ RSpec.describe "MCP tools endpoint", type: :request do
     end
   end
 
-  describe "RBAC par scope" do
-    it "viewer peut search_hosts (read:hosts) et list_scopes (read:scopes)" do
+  describe "RBAC par scope (mono-user)" do
+    it "une clé scopée read:hosts peut search_hosts" do
+      _, raw = registry.api_key_store.create_for(scopes: [:"read:hosts"])
       post "/mcp/tools/search_hosts",
-        params: { query: "x" }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "viewer" }
+        params:  { query: "x" }.to_json,
+        headers: {
+          "Content-Type" => "application/json",
+          "Authorization" => "Bearer #{raw}"
+        }
       expect(response).to have_http_status(:ok)
     end
 
-    it "un role inconnu (sans scopes) recoit 403 rbac_forbidden" do
-      post "/mcp/tools/search_hosts",
-        params: { query: "x" }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "stranger" }
-
-      # X-Reconaut-Role inconnu -> defaut :viewer (cf. RoleResolver), donc OK.
-      # Pour tester l'absence de scope, on stub temporairement :
+    it "une clé sans le scope requis reçoit 403 rbac_forbidden" do
+      _, raw = registry.api_key_store.create_for(scopes: [:"read:hosts"])
+      ENV["RECONAUT_REQUIRE_API_KEY"] = "true"
+      begin
+        post "/mcp/tools/add_scope",
+          params:  { kind: "ip", value: "192.0.2.1" }.to_json,
+          headers: {
+            "Content-Type" => "application/json",
+            "Authorization" => "Bearer #{raw}"
+          }
+        expect(response).to have_http_status(:forbidden)
+        expect(JSON.parse(response.body)["error"]).to eq("rbac_forbidden")
+      ensure
+        ENV.delete("RECONAUT_REQUIRE_API_KEY")
+      end
     end
   end
 
@@ -185,23 +197,26 @@ RSpec.describe "MCP tools endpoint", type: :request do
       Mcp::CoreTools.register_all!(retriever: retriever, scope_storage: storage)
     end
 
-    it "ecrit une entree d'audit success sur invocation reussie" do
+    it "ecrit une entree d'audit success sur invocation reussie avec key:<prefix>" do
+      record, raw = registry.api_key_store.create_for
+
       post "/mcp/tools/search_hosts",
         params: { query: "x" }.to_json,
-        headers: { "Content-Type" => "application/json",
-                   "X-Reconaut-Role" => "analyst",
-                   "X-Reconaut-Caller" => "analyst-1" }
+        headers: {
+          "Content-Type"  => "application/json",
+          "Authorization" => "Bearer #{raw}"
+        }
 
       entry = audit.entries.last
       expect(entry[:status]).to eq(:success)
       expect(entry[:template_id]).to eq("mcp:search_hosts")
-      expect(entry[:caller_id]).to eq("analyst-1")
+      expect(entry[:caller_id]).to eq("key:#{record.prefix}")
     end
 
     it "ecrit une entree :unknown_template sur outil inconnu" do
       post "/mcp/tools/banana",
         params: {}.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "viewer" }
+        headers: { "Content-Type" => "application/json" }
 
       expect(audit.entries.last[:status]).to eq(:unknown_template)
       expect(audit.entries.last[:template_id]).to eq("mcp:banana")

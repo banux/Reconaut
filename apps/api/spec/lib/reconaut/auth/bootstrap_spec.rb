@@ -69,5 +69,36 @@ RSpec.describe Reconaut::Auth::Bootstrap do
       # Mode mono-user : tout user authentifié a role :operator.
       expect(identity.role).to eq(:operator)
     end
+
+    describe "rotate: true" do
+      it "remplace le password_hash et révoque toutes les clés API existantes" do
+        first = described_class.call(email: "a@b.c", password: "p1", registry: registry)
+        old_token = first[:api_key][:token]
+
+        rotated = described_class.call(
+          email: "a@b.c", password: "p2", rotate: true, registry: registry
+        )
+
+        # Le user a le même id (rotation in-place du password).
+        expect(rotated[:user].id).to eq(first[:user].id)
+        expect(rotated[:rotated]).to be true
+
+        # L'ancienne clé est révoquée.
+        old_identity = registry.authenticator.from_authorization("Bearer #{old_token}")
+        expect(old_identity).to be_nil
+
+        # La nouvelle clé fonctionne.
+        new_token = rotated[:api_key][:token]
+        new_identity = registry.authenticator.from_authorization("Bearer #{new_token}")
+        expect(new_identity).not_to be_nil
+      end
+
+      it "sans rotate, un second appel reste rejeté" do
+        described_class.call(email: "a@b.c", password: "p1", registry: registry)
+        expect {
+          described_class.call(email: "a@b.c", password: "p2", registry: registry)
+        }.to raise_error(described_class::AlreadyInitializedError)
+      end
+    end
   end
 end

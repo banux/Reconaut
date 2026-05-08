@@ -96,6 +96,22 @@ echo "Pour les MSSP qui ..." > docs/_test_tmp/rogue.md
 assert_lint "MSSP mention in docs -> exit != 0" 1
 rm -rf docs/_test_tmp
 
+# --- 11. Réintroduction d'une dépendance OIDC -> exit != 0 (mono-user) ---
+cp apps/api/Gemfile apps/api/Gemfile.bak
+echo 'gem "omniauth-oidc"' >> apps/api/Gemfile
+assert_lint "omniauth-oidc gem in apps/api/Gemfile -> exit != 0 (mono-user)" 1
+mv apps/api/Gemfile.bak apps/api/Gemfile
+
+# --- 12. Réintroduction d'une constante de roles -> exit != 0 ---
+mkdir -p apps/api/app/lib/_test_tmp
+cat > apps/api/app/lib/_test_tmp/roles.rb <<'RUBY'
+module Foo
+  VALID_ROLES = %i[viewer admin].freeze
+end
+RUBY
+assert_lint "VALID_ROLES constant reintroduced -> exit != 0" 1
+rm -rf apps/api/app/lib/_test_tmp
+
 # --- Etat propre apres cleanup ---
 assert_lint "clean tree (post-cleanup) -> exit 0" 0
 

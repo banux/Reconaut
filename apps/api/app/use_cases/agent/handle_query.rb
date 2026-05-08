@@ -4,26 +4,25 @@ require_relative "../../lib/agent/hybrid_retriever"
 
 module Agent
   module UseCases
-    # Use case appele par le controller POST /agent/chat. Application :
-    #   - applique le RBAC : viewer -> 403, analyst+ -> autorise.
-    #   - delegue le retrieval a Agent::HybridRetriever.
-    #   - normalise le shape de la reponse pour le frontend (cf.
-    #     apps/web/src/api/agent.js).
-    #   - enregistre une ligne d'audit pour chaque appel (success ou
-    #     unauthorized) via Agent::AuditRecorder.
+    # Use case `agent_chat` (invoqué par le tool MCP du même nom).
+    # Application :
+    #   - délègue le retrieval à Agent::HybridRetriever ;
+    #   - normalise la forme de la réponse (rows + citations + metadata) ;
+    #   - enregistre une ligne d'audit pour chaque appel via
+    #     Agent::AuditRecorder.
     #
-    # Source de verite :
+    # Source de vérité :
     #   openspec/changes/init-reconaut-platform/specs/agent-interface/spec.md
     #   openspec/changes/add-graph-retrieval/specs/agent-interface/spec.md
-    #     -> Requirement: RBAC-Scoped Conversation Context
+    #   openspec/changes/single-user-only/specs/platform/spec.md
+    #     -> Plus de notion de rôle ; le contrôle d'accès est porté par
+    #        les scopes MCP (`agent:chat`).
     #
     # Use case pur : aucun couplage Rails, aucune DB ; tout est injectable.
     class HandleQuery
-      AUTHORIZED_ROLES = %i[analyst admin owner mcp_client].freeze
-
       Result = Struct.new(:status, :body, keyword_init: true) do
         def http_status
-          { ok: 200, unauthorized: 403, bad_request: 400 }.fetch(status, 500)
+          { ok: 200, bad_request: 400 }.fetch(status, 500)
         end
       end
 
@@ -32,16 +31,9 @@ module Agent
         @audit     = audit_recorder
       end
 
-      def call(query:, caller_role:, caller_id: "anonymous")
+      def call(query:, caller_id: "anonymous")
         if query.to_s.strip.empty?
           return error(:bad_request, "query_required", caller_id: caller_id)
-        end
-
-        unless AUTHORIZED_ROLES.include?(caller_role)
-          record_audit(:unauthorized, caller_id: caller_id, template_id: nil,
-                       params_normalized: { reason: "rbac_forbidden" },
-                       duration_ms: 0, nodes_touched: 0)
-          return Result.new(status: :unauthorized, body: { error: "rbac_forbidden" })
         end
 
         response = @retriever.call(query)
@@ -83,7 +75,7 @@ module Agent
           nodes_touched: fields[:nodes_touched].to_i
         )
       rescue StandardError
-        # L'audit ne doit JAMAIS faire echouer la requete utilisateur.
+        # L'audit ne doit JAMAIS faire échouer la requête utilisateur.
       end
     end
   end

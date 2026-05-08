@@ -49,13 +49,11 @@ ALLOWLIST_PATTERNS=(
   ',[[:space:]]*to:[[:space:]]*"mcp/'
 )
 
-# --- Zone de transition (deprecie, sera retire par remove-rest-wrappers) ----
-# Patterns matches sur la ligne complete (incluant le prefixe "lineno:" ajoute
-# par grep -n). On les ecrit assez liberalement pour absorber les variations.
-TRANSITION_PATTERNS=(
-  '"/agent/chat"'                         # -> sera migre vers tool MCP agent_chat
-  'resources[[:space:]]+:scopes'          # -> migre vers list_scopes/add_scope/revoke_scope MCP tools
-)
+# --- Zone de transition (depreciee, sera retiree par remove-rest-wrappers) --
+# Vide depuis le change `single-user-only` : les controllers REST hérités
+# (`Agent::ChatController`, `ScopesController`) ont été supprimés. Toute
+# nouvelle route doit figurer dans l'ALLOWLIST_PATTERNS ci-dessus.
+TRANSITION_PATTERNS=()
 
 # Extrait les declarations de route (lignes "get/post/put/delete/patch" + "resources" + "match")
 mapfile -t routes < <(

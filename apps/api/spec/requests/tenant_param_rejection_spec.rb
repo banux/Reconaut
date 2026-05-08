@@ -2,53 +2,64 @@
 
 require "rails_helper"
 
-# Couvre init-reconaut-platform 7.1 : "API rejette tout parametre
+# Couvre init-reconaut-platform 7.1 : "API rejette tout paramètre
 # tenant_id ou header X-Tenant" et add-tech-stack architecture
-# scenario "API rejette tout parametre de tenant".
-
+# scenario "API rejette tout paramètre de tenant".
+#
+# Les anciens endpoints REST (/scopes, /agent/chat) ont été retirés
+# par single-user-only / mcp-as-primary-entrypoint ; le contrôle vit
+# désormais sur le canal MCP. On vérifie sur `POST /mcp/tools/:name`
+# que le rejet tenant reste actif.
 RSpec.describe "Tenant param rejection", type: :request do
-  before { Reconaut::Registry.reset! }
-  after  { Reconaut::Registry.reset! }
+  before do
+    Reconaut::Registry.reset!
+    Mcp::ToolRegistry.reset!
+    storage = Reconaut::Registry.default.scope_storage
+    response = Agent::HybridRetriever::Response.new(
+      rows: [], citations: [], warnings: [], retrieval_path: "none", duration_ms: 0
+    )
+    retriever = Class.new {
+      def initialize(r) = (@r = r)
+      def call(_) = @r
+    }.new(response)
+    Mcp::CoreTools.register_all!(retriever: retriever, scope_storage: storage)
+  end
 
-  describe "via query param" do
-    it "GET /scopes?tenant_id=x -> 400 tenant_param_unsupported" do
-      get "/scopes", params: { tenant_id: "x" },
-                     headers: { "X-Reconaut-Role" => "viewer" }
-      expect(response).to have_http_status(:bad_request)
-      expect(JSON.parse(response.body)).to eq("error" => "tenant_param_unsupported")
-    end
+  after do
+    Mcp::ToolRegistry.reset!
+    Reconaut::Registry.reset!
+  end
 
-    it "POST /agent/chat avec tenant_id dans le body -> 400" do
-      post "/agent/chat",
-        params: { query: "hi", tenant_id: "x" }.to_json,
-        headers: { "Content-Type" => "application/json", "X-Reconaut-Role" => "owner" }
+  describe "via query/body param sur MCP" do
+    it "POST /mcp/tools/list_scopes?tenant_id=x -> 400" do
+      post "/mcp/tools/list_scopes", params: { tenant_id: "x" }.to_json,
+        headers: { "Content-Type" => "application/json" }
       expect(response).to have_http_status(:bad_request)
       expect(JSON.parse(response.body)).to eq("error" => "tenant_param_unsupported")
     end
 
     it "rejette aussi `tenant`, `caller_tenant`, `org_id`" do
       %w[tenant caller_tenant org_id].each do |param|
-        get "/scopes", params: { param => "x" },
-                       headers: { "X-Reconaut-Role" => "viewer" }
+        post "/mcp/tools/list_scopes", params: { param => "x" }.to_json,
+          headers: { "Content-Type" => "application/json" }
         expect(response).to have_http_status(:bad_request),
                             "expected 400 for param=#{param}, got #{response.status}"
       end
     end
   end
 
-  describe "via header" do
+  describe "via header sur MCP" do
     it "X-Tenant -> 400" do
-      get "/scopes", headers: {
-        "X-Reconaut-Role" => "viewer",
-        "X-Tenant" => "acme"
-      }
+      post "/mcp/tools/list_scopes", params: {}.to_json,
+        headers: { "Content-Type" => "application/json", "X-Tenant" => "acme" }
       expect(response).to have_http_status(:bad_request)
       expect(JSON.parse(response.body)).to eq("error" => "tenant_param_unsupported")
     end
 
-    it "X-Tenant-Id, X-Org, X-Org-Id sont aussi rejetes" do
+    it "X-Tenant-Id, X-Org, X-Org-Id sont aussi rejetés" do
       %w[X-Tenant-Id X-Org X-Org-Id].each do |h|
-        get "/scopes", headers: { "X-Reconaut-Role" => "viewer", h => "x" }
+        post "/mcp/tools/list_scopes", params: {}.to_json,
+          headers: { "Content-Type" => "application/json", h => "x" }
         expect(response).to have_http_status(:bad_request),
                             "expected 400 for header=#{h}"
       end
@@ -56,8 +67,9 @@ RSpec.describe "Tenant param rejection", type: :request do
   end
 
   describe "happy path (sans tenant)" do
-    it "GET /scopes sans aucun champ tenant -> 200" do
-      get "/scopes", headers: { "X-Reconaut-Role" => "viewer" }
+    it "POST /mcp/tools/list_scopes sans champ tenant -> 200" do
+      post "/mcp/tools/list_scopes", params: {}.to_json,
+        headers: { "Content-Type" => "application/json" }
       expect(response).to have_http_status(:ok)
     end
   end
