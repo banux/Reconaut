@@ -57,10 +57,13 @@ namespace :reconaut do
         nil
       },
       last_worker_heartbeat: ->(_ctx) {
-        # Cote production, l'heartbeat est ecrite par le worker Go
-        # dans une table dediee (a livrer en meme temps que le wiring
-        # main.go). Tant qu'elle n'existe pas, le probe renvoie nil et
-        # le check passe en :unknown.
+        # Lit le dernier heartbeat reçu via le tool MCP submit_heartbeat
+        # (cf. add-tech-stack §6 + reconaut/heartbeats.rb). Si aucun
+        # worker ne s'est encore annoncé, renvoie nil et le probe passe
+        # en :unknown.
+        latest = Reconaut::Registry.default.heartbeat_store.latest
+        latest&.to_h
+      rescue StandardError
         nil
       }
     }
