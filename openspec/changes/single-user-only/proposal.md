@@ -61,7 +61,7 @@ Ce change retire la couche multi-user / multi-rôle, simplifie le modèle d'auth
 
 ## Décisions prises
 
-1. **Mono-user strict.** Une instance = un opérateur. Justifié par la simplicité radicale (pas de RBAC, pas d'IdP, pas de gestion d'invitations) et par la cohérence avec le modèle tenant unique déjà acté : un MSSP qui veut servir N clients déploie N instances ; un opérateur SOC interne qui veut donner un accès limité à un collègue lui passe une clé API à scope réduit.
+1. **Mono-user strict.** Une instance = un opérateur. Justifié par la simplicité radicale (pas de RBAC, pas d'IdP, pas de gestion d'invitations) et par la cohérence avec le modèle tenant unique déjà acté : un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances, et un opérateur qui veut donner un accès partiel à un agent IA externe lui transmet une clé API à scope réduit.
 2. **Plusieurs clés API par opérateur, chacune scopée.** Conserve la défense-en-profondeur. La TUI prend une clé full-scope ; un agent IA externe peut prendre une clé `read:hosts` + `read:scans` seulement, etc.
 3. **OIDC retiré du périmètre v1.** Justifié par le coût d'intégration OIDC vs le bénéfice nul en mono-user. Réintroductible plus tard si mode multi-user un jour.
 4. **Bootstrap = `RECONAUT_OPERATOR_PASSWORD` (env), point.** Plus simple à expliquer, plus simple à auditer, pas d'email à inventer.

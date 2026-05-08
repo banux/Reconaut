@@ -108,6 +108,14 @@ module Mcp
           raise ParamOutOfRangeError, "#{name} not in enum"
         end
         value
+      when :hash
+        # Hash arbitraire (pour les tools qui acceptent un payload
+        # libre, validé séparément contre un JSON Schema). Utilisé par
+        # ingest_scan_result qui valide ensuite contre ScanResultV1.
+        unless value.is_a?(Hash)
+          raise ParamTypeError, "#{name} must be a hash"
+        end
+        value
       else
         raise ParamTypeError, "unknown spec type for #{name}"
       end

@@ -33,7 +33,7 @@ Il amorce aussi `openspec/project.md` pour que les changes futurs partagent un d
 - **Exploitation active**, PoC d'exploitation ou payloads weaponisés de toute nature.
 - **Désanonymisation de masse**, scan au-delà de barrières authentifiées sans autorisation.
 - **Clients mobiles** en v1.
-- **Distribution SaaS multi-tenant gérée par le projet** — l'OSS est self-hosted ; un MSSP qui veut servir N clients déploie N instances Reconaut isolées.
+- **Distribution SaaS multi-tenant gérée par le projet** — l'OSS est self-hosted. Un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances ; toute distribution managée par un tiers est extérieure au projet.
 - **Mode multi-tenant en v1** — Reconaut est tenant unique par construction. Aucune colonne `tenant_id`, aucune RLS par tenant. Si un besoin émerge, ce sera l'objet d'un change ultérieur dédié.
 - **Facturation, abonnements, métering commercial.** Hors scope définitif.
 - **Stockage objet S3-compatible** (S3, MinIO, etc.) — exclu en v1, filesystem local ou Postgres pour les artefacts.
@@ -47,7 +47,7 @@ Il amorce aussi `openspec/project.md` pour que les changes futurs partagent un d
 2. **Scope-driven scanning.** Le scanner refuse en dur les cibles hors scope déclaré. C'est la frontière éthique et légale du produit ; la spec `scanning` ne décrit aucune découverte sur le grand internet.
 3. **Operator-as-controller RGPD.** Reconaut fournit les outils ; l'opérateur porte la responsabilité de conformité. La spec `gdpr-compliance` décrit des *capacités*, pas des affirmations.
 4. **Embedder pluggable, défaut self-hostable.** L'instance auto-hébergée DOIT pouvoir tourner sans appel sortant. Mistral, OpenAI-compatible et tout autre fournisseur restent des options derrière l'interface `Embedder`.
-5. **Tenant unique en v1.** Une instance Reconaut = un opérateur = un périmètre d'actifs. Pas de multi-tenant, pas de RLS par tenant, pas de notion de tenant dans le schéma. Un MSSP qui veut servir N clients déploie N instances. Cette simplicité radicale est le bon trade-off pour un OSS self-hosted ; le multi-tenant peut être réintroduit par un change ultérieur si la demande émerge.
+5. **Tenant unique en v1.** Une instance Reconaut = un opérateur = un périmètre d'actifs. Pas de multi-tenant, pas de RLS par tenant, pas de notion de tenant dans le schéma. Un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances. Cette simplicité radicale est le bon trade-off pour un OSS self-hosted ; le multi-tenant peut être réintroduit par un change ultérieur si la demande émerge.
 6. **Aucune télémétrie vers un acteur tiers.** Pas de phone-home, pas de SDK d'analytics. L'instrumentation OpenTelemetry interne reste autorisée et utile pour la supervision opérateur — l'opérateur configure son propre collecteur (Jaeger, Tempo, Prometheus, etc.), aucune destination n'est codée par le projet.
 7. **DCO sign-off, pas CLA.** Friction d'entrée minimale pour les contributeurs ; pas de cession de droits supplémentaires demandée.
 8. **Pas de facturation dans le cœur.** Aucune intégration commerciale n'est embarquée.

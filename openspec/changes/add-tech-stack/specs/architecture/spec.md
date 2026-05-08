@@ -87,7 +87,7 @@ Les workers Go DOIVENT pouvoir être instanciés à `N>1` sur plusieurs machines
 - **THEN** le résultat persisté en base ne contient qu'une seule occurrence pour `K` ; la seconde livraison est détectée et acquittée sans nouvelle écriture
 
 ### Requirement: Single-Tenant Data Model
-Reconaut est livré en mode **tenant unique** en v1. Le modèle de données NE COMPORTE PAS de notion de tenant : pas de colonne `tenant_id`, pas de RLS par tenant, pas d'UI de gestion de tenants. Une instance = un opérateur = un périmètre d'actifs. Un MSSP qui veut servir N clients DOIT déployer N instances Reconaut indépendantes.
+Reconaut est livré en mode **tenant unique** en v1. Le modèle de données NE COMPORTE PAS de notion de tenant : pas de colonne `tenant_id`, pas de RLS par tenant, pas d'UI de gestion de tenants. Une instance = un opérateur = un périmètre d'actifs. Un opérateur qui veut isoler plusieurs périmètres DOIT déployer plusieurs instances Reconaut indépendantes.
 
 #### Scenario: Schéma DB sans colonne tenant_id
 - **GIVEN** le schéma Postgres de production après les migrations

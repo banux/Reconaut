@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Single-Tenant Data Model
-Reconaut est livré en mode **tenant unique** en v1. Le schéma de données ne comporte AUCUNE notion de tenant : pas de colonne `tenant_id`, pas de RLS par tenant, pas d'UI de gestion de tenants. Une instance = un opérateur = un périmètre d'actifs déclaré. Un MSSP qui veut servir N clients DOIT déployer N instances Reconaut indépendantes.
+Reconaut est livré en mode **tenant unique** en v1. Le schéma de données ne comporte AUCUNE notion de tenant : pas de colonne `tenant_id`, pas de RLS par tenant, pas d'UI de gestion de tenants. Une instance = un opérateur = un périmètre d'actifs déclaré. Un opérateur qui veut isoler plusieurs périmètres DOIT déployer plusieurs instances Reconaut indépendantes.
 
 #### Scenario: Schéma DB sans colonne tenant_id
 - **GIVEN** le schéma Postgres après les migrations initiales

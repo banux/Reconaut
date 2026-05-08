@@ -4,7 +4,7 @@ Reconaut est un **outil open source auto-hébergeable** d'Attack Surface Managem
 
 ## Positionnement
 
-- **Open source, auto-hébergeable.** Reconaut est conçu pour tourner chez l'opérateur (équipe sécurité interne, MSSP, SOC, indépendant). **Tenant unique** par construction : une instance = un périmètre d'actifs. Pas de mode multi-tenant en v1 (un MSSP qui veut servir N clients déploie N instances).
+- **Open source, auto-hébergeable.** Reconaut est une **base de connaissance d'actifs internet** maintenue par son opérateur, queryable par ses agents IA et intégrable à sa stack sécurité. **Mono-user** par construction : une instance = un opérateur = un périmètre d'actifs. Un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances.
 - **Scope-driven.** Le scanner refuse par construction de scanner une cible hors de la liste d'autorisation déclarée par l'opérateur. Pas de découverte du grand internet « à la Shodan ».
 - **Boundary RGPD claire.** L'opérateur est le responsable de traitement (controller). Reconaut fournit les outils pour qu'il tienne ses obligations (journal d'audit, effacement, résidence configurable), mais ne porte pas la responsabilité de conformité à sa place.
 
@@ -46,7 +46,8 @@ Reconaut est un **outil open source auto-hébergeable** d'Attack Surface Managem
 - Pas de balayage du grand internet (IPv4/IPv6 publics non autorisés par l'opérateur).
 - Pas d'exploitation active, pas de PoC d'exploitation, pas de payloads weaponisés.
 - Pas de désanonymisation, pas de scan au-delà de barrières authentifiées.
-- Pas de mode multi-tenant en v1. Un MSSP qui veut servir N clients déploie N instances Reconaut isolées.
+- Pas de mode multi-tenant ni de support multi-utilisateurs en v1. Un opérateur qui veut isoler plusieurs périmètres ou donner un accès partiel à un agent externe passe par plusieurs instances ou par des clés API à scopes réduits.
+- Pas un produit autonome de scan-puis-rapport. Reconaut est un composant de la stack de l'opérateur, intégré via MCP avec ses agents IA et avec d'autres outils (entrée : ingestion de scanners externes ; sortie : MCP, futurs webhooks).
 - Pas de stockage objet (S3, MinIO, Azure Blob…) en v1 — filesystem ou Postgres.
 - Pas de broker de jobs externe — GoodJob (Postgres) suffit.
 - Pas de clients mobiles en v1.

@@ -4,6 +4,7 @@ require_relative "tool_registry"
 require_relative "../agent/hybrid_retriever"
 require_relative "../reconaut/scan_enqueuer"
 require_relative "../reconaut/doctor"
+require_relative "../reconaut/ingest_scan_result"
 require_relative "../../use_cases/scopes/operations"
 
 module Mcp
@@ -20,7 +21,8 @@ module Mcp
 
     def register_all!(retriever:, scope_storage:, scan_enqueuer: nil,
                       doctor: Reconaut::Doctor, doctor_probes: {}, doctor_env: ENV.to_h,
-                      user_storage: nil, api_key_storage: nil)
+                      user_storage: nil, api_key_storage: nil,
+                      ingestion_recorder: nil)
       ToolRegistry.reset!
 
       # search_hosts : delegue au HybridRetriever, expose les rows + warnings.
@@ -164,6 +166,27 @@ module Mcp
             { ok: false, error: "invalid_payload", message: e.message }
           end
         end
+      end
+
+      # ingest_scan_result : surface d'integration entrante. Accepte
+      # un payload conforme ScanResultV1 provenant d'un outil externe
+      # (nmap, nuclei, etc.) et l'ingere dans la base de connaissance.
+      # Le payload est valide contre le schema canonique ; la cible est
+      # verifiee contre le scope declare ; l'idempotency_key permet la
+      # deduplication. Cf. openspec/changes/reposition-as-agent-knowledge-base/.
+      ToolRegistry.register(
+        name:   "ingest_scan_result",
+        scopes: [:"write:scans"],
+        params_schema: {
+          payload: { type: :hash }
+        }
+      ) do |params:, caller_id:|
+        Reconaut::IngestScanResult.call(
+          payload:            params[:payload],
+          scope_storage:      scope_storage,
+          ingestion_recorder: ingestion_recorder,
+          caller_id:          caller_id
+        )
       end
 
       # system_doctor : expose le rapport Reconaut::Doctor comme outil
