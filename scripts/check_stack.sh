@@ -172,6 +172,11 @@ gdpr_allowlist=(
   "openspec/changes/drop-gdpr-framing/"
   "openspec/changes/init-reconaut-platform/specs/gdpr-compliance/"
   "docs/adr/"
+  # Pages opérateur qui expliquent explicitement pourquoi Reconaut ne
+  # fournit PAS de cadre RGPD applicatif. Elles mentionnent RGPD pour
+  # le retirer narrativement, pas pour décrire une feature applicative.
+  "docs/operating/responsibility-model.md"
+  "docs/usage/scope.md"
 )
 
 gdpr_hits=$(grep -RnIE 'RGPD|GDPR' \
@@ -199,7 +204,7 @@ if [[ -n "$filtered_gdpr" ]]; then
   remaining=""
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    if [[ "$line" =~ (Pas\ de\ RGPD|pas\ de\ cadre\ RGPD|drop-gdpr-framing|retir(é|ée?)|RoPA\ RGPD|cadre\ RGPD|registre\ de\ traitements\ RGPD|conformité\ RGPD|conformite\ RGPD) ]]; then
+    if [[ "$line" =~ (Pas\ de\ RGPD|pas\ de\ cadre\ RGPD|drop-gdpr-framing|retir(é|ée?)|RoPA\ RGPD|cadre\ RGPD|registre\ de\ traitements\ RGPD|conformité\ RGPD|conformite\ RGPD|au\ sens\ du\ RGPD|pas\ un\ workflow\ DSAR/RGPD|pas\ RGPD\.|RGPD\)|ne\ stocke\ pas\ de\ PII) ]]; then
       continue
     fi
     remaining+="$line"$'\n'

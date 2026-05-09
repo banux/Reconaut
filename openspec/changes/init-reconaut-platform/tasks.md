@@ -209,15 +209,15 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Une revue humaine confirme la clarté du quickstart ; un utilisateur externe arrive à lancer une instance locale en suivant uniquement le README.
   - **Statut** : `README.md` réécrit avec : positionnement (1 paragraphe), quickstart 6 étapes (clone + bin/setup + bundle/npm install + `reconaut:bootstrap_owner` + `rails server` + `npm run dev`), section bootstrap auto-hébergé (4 providers d'embedder + `reconaut:doctor`), layout monorepo, stack figée résumée, table des docs (5 ADR/architecture), statut OpenSpec, licence (lien LICENSE + ADR), section télémétrie explicite (zéro analytics tiers, OTel opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`).
 
-- [ ] **9.2 Doc opérateur : modèle de responsabilité opérationnelle**
+- [x] **9.2 Doc opérateur : modèle de responsabilité opérationnelle**
   - **Notes** : `docs/operating/responsibility-model.md` qui explique : l'opérateur applique sa propre éthique/légalité de scan, Reconaut = outil qui applique le scope déclaré, fournisseurs externes (LLM/embedder cloud) sont sous la responsabilité de l'opérateur si activés. Liste des outils opérationnels que la plateforme fournit (audit append-only, effacement par cible, étiquette de résidence). **Pas de framework RGPD applicatif** — Reconaut ne stocke pas de PII (cf. change `drop-gdpr-framing`).
   - **Test plan** : La page existe et est référencée depuis le README et la doc d'installation.
 
-- [ ] **9.3 Doc utilisateur : déclaration de scope**
+- [x] **9.3 Doc utilisateur : déclaration de scope**
   - **Notes** : `docs/usage/scope.md` qui explique le modèle scope-driven, comment déclarer son scope, ce qui se passe quand une cible est hors scope.
   - **Test plan** : La page existe et est citée depuis l'UI au premier login.
 
-- [ ] **9.4 Site de doc public (Docusaurus ou MkDocs)** — référence API + référence outils MCP (HTTP+SSE) + page DSAR opérateur + runbooks de déploiement.
+- [ ] **9.4 Site de doc public (Docusaurus ou MkDocs)** — référence API + référence outils MCP (HTTP+SSE) + runbooks de déploiement. *Reformulé par `drop-gdpr-framing` : pas de page DSAR (Reconaut ne stocke pas de PII ; la page `docs/operating/responsibility-model.md` couvre ce que l'opérateur doit comprendre).* **Différé à un change dédié `add-doc-site`** : choix d'outil, structure de navigation, theme, build CI, déploiement GitHub Pages — chantier qui mérite son propre cycle plan→implement.
 
 ---
 

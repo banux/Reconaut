@@ -131,6 +131,11 @@ Detail complet : [`openspec/project.md`](openspec/project.md).
   nouveau type de scan.
 - [`docs/architecture/worker-scaling.md`](docs/architecture/worker-scaling.md)
   - runbook : ajouter / retirer un worker Go en production.
+- [`docs/operating/responsibility-model.md`](docs/operating/responsibility-model.md)
+  - modele de responsabilite operateur / Reconaut / fournisseurs externes ;
+    audit append-only, erase by target, etiquette de residence.
+- [`docs/usage/scope.md`](docs/usage/scope.md)
+  - declarer son scope, ce qui se passe quand une cible est hors scope.
 
 ## Statut
 
