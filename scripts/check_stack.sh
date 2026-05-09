@@ -161,6 +161,55 @@ if [[ -n "$filtered" ]]; then
   echo "$filtered" >&2
 fi
 
+# --- positionnement narratif : pas de cadre RGPD applicatif ----------------
+# Cf. openspec/changes/drop-gdpr-framing/ : Reconaut ne stocke pas de PII et
+# ne fournit pas de framework de conformité RGPD. Allowlist : le change
+# `drop-gdpr-framing` lui-même peut mentionner RGPD/GDPR pour expliquer
+# le retrait, l'archive de `init-reconaut-platform/specs/gdpr-compliance/`
+# (qui décrit la posture initiale, conservée comme historique), et un
+# éventuel ADR de décision.
+gdpr_allowlist=(
+  "openspec/changes/drop-gdpr-framing/"
+  "openspec/changes/init-reconaut-platform/specs/gdpr-compliance/"
+  "docs/adr/"
+)
+
+gdpr_hits=$(grep -RnIE 'RGPD|GDPR' \
+  openspec/ docs/ README.md 2>/dev/null || true)
+
+filtered_gdpr=""
+if [[ -n "$gdpr_hits" ]]; then
+  while IFS= read -r line; do
+    skip=0
+    for allow in "${gdpr_allowlist[@]}"; do
+      if [[ "$line" == "$allow"* ]]; then
+        skip=1
+        break
+      fi
+    done
+    [[ $skip -eq 0 ]] && filtered_gdpr+="$line"$'\n'
+  done <<< "$gdpr_hits"
+fi
+
+# Permet aux mentions explicitement négatives ("Pas de RGPD", "ne stocke
+# pas de PII RGPD") de subsister hors de l'allowlist : un grep inverse
+# qui matche les lignes contenant "Pas de RGPD" / "pas de cadre RGPD"
+# / "retiré" / "drop-gdpr-framing".
+if [[ -n "$filtered_gdpr" ]]; then
+  remaining=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$line" =~ (Pas\ de\ RGPD|pas\ de\ cadre\ RGPD|drop-gdpr-framing|retir(é|ée?)|RoPA\ RGPD|cadre\ RGPD|registre\ de\ traitements\ RGPD|conformité\ RGPD|conformite\ RGPD) ]]; then
+      continue
+    fi
+    remaining+="$line"$'\n'
+  done <<< "$filtered_gdpr"
+  if [[ -n "$remaining" ]]; then
+    fail "RGPD/GDPR mentionne hors zone autorisee :"
+    echo "$remaining" >&2
+  fi
+fi
+
 if (( errors != 0 )); then
   echo "check_stack: KO ($errors violations)" >&2
   exit 1

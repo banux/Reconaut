@@ -10,7 +10,7 @@ La spec `agent-interface` initialisée par `init-reconaut-platform` repose sur u
 
 Ces requêtes sont par nature des **parcours de graphe**. Un RAG vectoriel n'a pas de notion de chemin et retourne du texte plat — ce qui pousse le LLM à halluciner les relations.
 
-La note de recherche `openspec/research/graph-rag.md` trace deux familles de Graph RAG et écarte celle « index-time LLM extraction » (Microsoft GraphRAG, LightRAG, Graphiti) : notre dataset est déjà structuré, faire passer chaque scan au LLM pour ré-extraire des entités déjà typées coûte des tokens, accroît l'exposition RGPD et — surtout — casse la promesse d'auto-hébergement sans condition (`project.md`) en transformant le graphe en sous-produit d'un LLM externe que l'opérateur n'a pas forcément configuré. La famille « native graph data » (Cypher sur graphe existant) est l'angle adapté.
+La note de recherche `openspec/research/graph-rag.md` trace deux familles de Graph RAG et écarte celle « index-time LLM extraction » (Microsoft GraphRAG, LightRAG, Graphiti) : notre dataset est déjà structuré, faire passer chaque scan au LLM pour ré-extraire des entités déjà typées coûte des tokens, et — surtout — casse la promesse d'auto-hébergement sans condition (`project.md`) en transformant le graphe en sous-produit d'un LLM externe que l'opérateur n'a pas forcément configuré. La famille « native graph data » (Cypher sur graphe existant) est l'angle adapté.
 
 Ce change formalise l'adoption d'une couche de retrieval graphe **complémentaire** au RAG vectoriel existant, et fait évoluer le pipeline de l'agent vers un retrieval hybride.
 

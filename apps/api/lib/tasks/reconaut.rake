@@ -15,7 +15,7 @@
 require "json"
 
 namespace :reconaut do
-  desc "Self-check : extension AGE, region EU, lag de projection, role reader, provider d'embedder"
+  desc "Self-check : extension AGE, étiquette de résidence, lag de projection, role reader, provider d'embedder"
   task doctor: :environment do
     require "reconaut/doctor"
 
@@ -32,7 +32,12 @@ namespace :reconaut do
           false
         end
       },
-      region: ->(_ctx) { ENV["RECONAUT_REGION"] },
+      # `region` est conservé comme nom de probe pour compat avec
+      # `check_data_residency` qui le consomme. La valeur source est
+      # désormais `RECONAUT_DATA_RESIDENCY` (étiquette de souveraineté
+      # libre, plus de validation EU). On lit aussi la legacy
+      # RECONAUT_REGION pour ne pas casser les déploiements existants.
+      region: ->(_ctx) { ENV["RECONAUT_DATA_RESIDENCY"] || ENV["RECONAUT_REGION"] },
       graph_lag_p95: ->(_ctx) {
         ENV["RECONAUT_GRAPH_LAG_P95_SECONDS"]&.then { |v| Float(v) rescue nil }
       },

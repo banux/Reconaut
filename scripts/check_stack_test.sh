@@ -126,6 +126,18 @@ RUBY
 assert_lint "VALID_ROLES constant reintroduced -> exit != 0" 1
 rm -rf apps/api/app/lib/_test_tmp
 
+# --- 13. Mention RGPD positive dans la doc -> exit != 0 (drop-gdpr-framing) ---
+mkdir -p docs/_test_tmp
+echo "Reconaut implémente le RGPD via un workflow d'effacement automatique." > docs/_test_tmp/rgpd.md
+assert_lint "RGPD positif dans docs/ -> exit != 0" 1
+rm -rf docs/_test_tmp
+
+# --- 14. Mention NÉGATIVE de RGPD dans la doc -> exit 0 (allowed) ---
+mkdir -p docs/_test_tmp
+echo "Pas de cadre RGPD applicatif. Reconaut ne stocke pas de PII." > docs/_test_tmp/no-rgpd.md
+assert_lint "mention négative RGPD dans docs/ -> exit 0" 0
+rm -rf docs/_test_tmp
+
 # --- Etat propre apres cleanup ---
 assert_lint "clean tree (post-cleanup) -> exit 0" 0
 

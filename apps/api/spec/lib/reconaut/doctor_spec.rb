@@ -19,7 +19,8 @@ RSpec.describe Reconaut::Doctor do
     expect(report.exit_code).to eq(0)
     statuses = report.checks.to_h { |c| [c.name, c.status] }
     expect(statuses["graph_tier"]).to eq(:ok)
-    expect(statuses["region"]).to eq(:ok)
+    # data_residency : info-level (étiquette de souveraineté libre, pas de validation)
+    expect(statuses["data_residency"]).to eq(:info)
     expect(statuses["graph_lag"]).to eq(:ok)
     expect(statuses["graph_role_reader"]).to eq(:ok)
     expect(statuses["external_llm_required"]).to eq(:ok)
@@ -37,26 +38,26 @@ RSpec.describe Reconaut::Doctor do
     expect(fail_check.details).to include("graph-extension-missing")
   end
 
-  it "region non-EU -> graph-region-not-allowed + exit 1" do
+  it "résidence libre acceptée — pas de validation par allowlist (cf. drop-gdpr-framing)" do
     report = described_class.run(
       probes: probes(region: ->(_) { "us-east-1" }),
       env: {}
     )
-    expect(report.ok).to be false
-    region_check = report.checks.find { |c| c.name == "region" }
-    expect(region_check.status).to eq(:fail)
-    expect(region_check.details).to include("graph-region-not-allowed")
-    expect(region_check.details).to include("us-east-1")
+    expect(report.ok).to be true # info-level, jamais fail
+    residency = report.checks.find { |c| c.name == "data_residency" }
+    expect(residency.status).to eq(:info)
+    expect(residency.details).to include("us-east-1")
   end
 
-  it "region absente -> graph-region-unknown" do
+  it "résidence absente -> info-level :unknown, jamais fail" do
     report = described_class.run(
       probes: probes(region: ->(_) { nil }),
       env: {}
     )
-    expect(report.ok).to be false
-    region_check = report.checks.find { |c| c.name == "region" }
-    expect(region_check.details).to include("graph-region-unknown")
+    expect(report.ok).to be true
+    residency = report.checks.find { |c| c.name == "data_residency" }
+    expect(residency.status).to eq(:unknown)
+    expect(residency.details).to include("RECONAUT_DATA_RESIDENCY")
   end
 
   it "graph_lag p95 > 60s -> fail" do

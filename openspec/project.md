@@ -7,7 +7,7 @@ Reconaut est une **base de connaissance d'actifs internet** open source, auto-h�
 - **Base de connaissance pour agents IA.** Reconaut n'est pas un produit autonome de scan-puis-rapport ; c'est un **composant intégrable** dans la stack sécurité de l'opérateur. Le persona principal est l'opérateur qui orchestre des agents IA contre sa surface d'attaque et veut leur donner une source d'autorité partagée.
 - **Open source, auto-hébergeable.** Reconaut est une **base de connaissance d'actifs internet** maintenue par son opérateur, queryable par ses agents IA et intégrable à sa stack sécurité. **Mono-user** par construction : une instance = un opérateur = un périmètre d'actifs. Un opérateur qui veut isoler plusieurs périmètres déploie plusieurs instances.
 - **Scope-driven.** Le scanner refuse par construction de scanner une cible hors de la liste d'autorisation déclarée par l'opérateur. Pas de découverte du grand internet « à la Shodan ».
-- **Boundary RGPD claire.** L'opérateur est le responsable de traitement (controller). Reconaut fournit les outils pour qu'il tienne ses obligations (journal d'audit, effacement, résidence configurable), mais ne porte pas la responsabilité de conformité à sa place.
+- **Données stockées = actifs internet, pas de PII.** Reconaut stocke des entrées de scope (CIDR/domaines/hôtes), des hôtes (IP/FQDN), des services (port/protocole/bannière/fingerprint), des certificats (CN/SAN/hash), et des métadonnées de scan (timestamps, codes de retour). Aucune donnée à caractère personnel n'est requise pour faire fonctionner l'outil. Si l'opérateur ingère involontairement du PII via une bannière ou un finding (rare), c'est à lui d'évaluer ce qu'il en fait — le projet ne fournit pas de framework dédié.
 
 ## Différenciateurs
 
@@ -32,7 +32,7 @@ Reconaut est une **base de connaissance d'actifs internet** open source, auto-h�
 
 ## Modèle de menace et limites de responsabilité
 
-- **L'opérateur est le controller RGPD.** Il déclare la base légale du scan (intérêt légitime sur ses propres actifs, contrat avec le tiers scanné, etc.). Le projet ne valide pas cette base.
+- **L'opérateur déclare la base légale et opérationnelle du scan.** Intérêt légitime sur ses propres actifs, autorisation explicite d'un tiers scanné, etc. Le projet ne valide pas cette base — c'est à l'opérateur d'avoir cette discipline avant de pousser une cible dans son scope.
 - **Reconaut applique le scope.** Le scanner refuse en dur les cibles hors scope. Modifier la liste d'autorisation passe par un workflow auditable.
 - **Pas de scan offensif.** Aucun PoC d'exploitation, aucun payload weaponisé, aucune désanonymisation, aucun bruteforce d'authentification.
 - **Pas de télémétrie vers un acteur tiers.** L'instance auto-hébergée n'envoie aucune donnée vers le projet ni vers un service tiers. Le code N'EMBARQUE PAS de SDK d'analytics (Mixpanel, Segment, Amplitude, PostHog, etc.) et n'a pas d'endpoint de télémétrie codé en dur vers le projet. **L'instrumentation OpenTelemetry interne (traces / métriques / logs) PEUT être exposée** par le code applicatif pour que l'opérateur la collecte avec son propre stack d'observabilité (Jaeger, Tempo, Prometheus, Loki, Grafana, etc.) — l'opérateur configure le collecteur, pointe vers son endpoint à lui, et reste seul destinataire.
@@ -54,10 +54,11 @@ Reconaut est une **base de connaissance d'actifs internet** open source, auto-h�
 - Pas de stockage objet (S3, MinIO, Azure Blob…) en v1 — filesystem ou Postgres.
 - Pas de broker de jobs externe — GoodJob (Postgres) suffit.
 - Pas de clients mobiles en v1.
+- Pas de cadre RGPD applicatif. Reconaut ne traite pas de PII au sens RGPD (cf. Positionnement). Pas de registre des traitements (RoPA), pas de tombstone hashée, pas de validation EU codée en dur. L'audit log et l'effacement par cible existent comme outils opérationnels (forensique, hygiène de la base de connaissance) — pas comme conformité.
 
 ## Conventions OpenSpec utilisées ici
 
 - Les changes vivent sous `openspec/changes/<change-id>/`.
-- Les domaines sont scindés en une spec par capacité (`scanning`, `ai-optimization`, `agent-interface`, `mcp-server`, `gdpr-compliance`, `platform`, `open-source-governance`, `architecture`, `graph-retrieval`).
+- Les domaines sont scindés en une spec par capacité (`scanning`, `ai-optimization`, `agent-interface`, `mcp-server`, `platform`, `open-source-governance`, `architecture`, `graph-retrieval`, `integrations`). La capacité `gdpr-compliance` a été retirée par le change `drop-gdpr-framing` — Reconaut ne stocke pas de PII et n'expose pas de framework de conformité dédié.
 - Chaque `### Requirement:` porte au moins un `#### Scenario:` et utilise MUST/SHALL (DOIT/DEVRA en français).
 - Les marqueurs structurels OpenSpec restent en anglais pour compatibilité outillage : `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`, `### Requirement:`, `#### Scenario:`, mots Gherkin en gras **GIVEN**/**WHEN**/**THEN**/**AND**. Le contenu en dessous est en français.

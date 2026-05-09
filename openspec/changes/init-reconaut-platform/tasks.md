@@ -135,19 +135,21 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ---
 
-## 6. Conformité RGPD — spec : `gdpr-compliance`
+## 6. Outils opérationnels (audit / erase / résidence) — spec : `platform`, `scanning`
 
-- [ ] **6.1 Configuration de résidence par l'opérateur**
-  - **Notes** : Variable / config `data_residency.allowed_regions` (liste d'identifiants de région ou simplement une chaîne libre documentaire pour les déploiements hors cloud). Le boot logue la valeur ; aucune valeur EU codée en dur dans le cœur.
-  - **Test plan** : Test boote avec `allowed_regions=["self-hosted-rack-1"]` → succès, valeur loguée. Test avec liste vide → exit non-zero `data-residency-not-configured`. Test Terraform avec une réplication source EU → destination hors-liste rejeté à `terraform plan`.
+> Section reformulée par le change `drop-gdpr-framing`. Reconaut ne stocke pas de PII et ne fournit pas de framework de conformité dédié. Les trois outils ci-dessous existent comme **outils opérationnels** (forensique, hygiène de la base de connaissance, étiquette de souveraineté) — pas comme conformité.
 
-- [ ] **6.2 Workflow d'effacement par sujet (outil opérateur)**
-  - **Notes** : UI + API permettant à l'opérateur d'effacer toutes les données liées à un identifiant (IP, domaine, `host_id`). Effacement transactionnel : OLTP + index vectoriel + graphe (si actif) + tier froid (Postgres compressé ou filesystem) + tombstone audit. Pas de validation de « contrôle de la cible » : c'est l'opérateur qui décide qui mérite l'effacement, sa propre conformité dicte la procédure interne.
-  - **Test plan** : Test e2e crée des données pour un identifiant, exécute l'effacement, assure (a) absence de l'identifiant dans toutes les couches en moins de 1 transaction, (b) tombstone hashée écrite dans le journal d'audit.
+- [ ] **6.1 Étiquette de résidence des données (souveraineté libre)**
+  - **Notes** : Variable d'env `RECONAUT_DATA_RESIDENCY` (chaîne libre : `"on-prem-rack-paris-1"`, `"hetzner-fsn1"`, `"aws-eu-west-3"`, `"self-hosted"`, etc.). Le boot logue la valeur. Le doctor expose un check `data_residency` info-level qui rapporte la chaîne. Aucune validation par allowlist EU côté projet — l'étiquette est documentaire.
+  - **Test plan** : Test boote avec `RECONAUT_DATA_RESIDENCY=on-prem-rack-paris-1` → la valeur apparaît dans le rapport doctor. Test avec variable absente → check `data_residency` rapporte `:unknown` mais n'échoue pas.
+
+- [ ] **6.2 Workflow d'effacement par cible (outil opérateur)**
+  - **Notes** : Service `Reconaut::EraseTarget` invocable via tool MCP `erase_target` (ou rake task équivalent). Efface en transaction Postgres : lignes scalaires (`hosts`, `services` rattachés, `scans` matchant), nœuds/arêtes AGE associés. Une ligne d'audit normale est écrite (sans tombstone hashée — l'audit standard suffit). C'est de l'**hygiène opérationnelle** : retirer un hôte qui n'est plus scopé, purger un certificat révoqué, etc.
+  - **Test plan** : Test e2e crée des données pour un identifiant, exécute `EraseTarget.call(target:)`, assure (a) absence de l'identifiant dans la couche OLTP et dans le graphe AGE après commit, (b) ligne d'audit avec `actor_key_id`, `target`, `action=erase`, `outcome=success`.
 
 - [ ] **6.3 Journal d'audit append-only**
-  - **Notes** : Table Postgres avec UPDATE/DELETE révoqués pour le rôle applicatif. Réplication cross-région reste *possible* (Postgres standard) mais cesse d'être un invariant cœur ; documenter comment l'activer dans `docs/operating/audit.md`.
-  - **Test plan** : `UPDATE`/`DELETE` direct sur la table d'audit échoue avec erreur de permission et la tentative est elle-même journalisée. Le job de checksum tourne et vérifie le snapshot de la veille.
+  - **Notes** : Table Postgres `audit_log` avec UPDATE/DELETE révoqués pour le rôle applicatif. Outil opérationnel — forensique, debug, accountability vis-à-vis de l'opérateur lui-même. Pas un registre de traitements RGPD. La doc `docs/operating/audit.md` mentionne que la réplication cross-région reste possible (Postgres standard) mais c'est facultatif.
+  - **Test plan** : `UPDATE`/`DELETE` direct sur `audit_log` échoue avec erreur de permission et la tentative est elle-même journalisée.
 
 ---
 
@@ -207,8 +209,8 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Une revue humaine confirme la clarté du quickstart ; un utilisateur externe arrive à lancer une instance locale en suivant uniquement le README.
   - **Statut** : `README.md` réécrit avec : positionnement (1 paragraphe), quickstart 6 étapes (clone + bin/setup + bundle/npm install + `reconaut:bootstrap_owner` + `rails server` + `npm run dev`), section bootstrap auto-hébergé (4 providers d'embedder + `reconaut:doctor`), layout monorepo, stack figée résumée, table des docs (5 ADR/architecture), statut OpenSpec, licence (lien LICENSE + ADR), section télémétrie explicite (zéro analytics tiers, OTel opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`).
 
-- [ ] **9.2 Doc opérateur : modèle de responsabilité RGPD**
-  - **Notes** : `docs/operating/responsibility-model.md` qui explique : opérateur = controller, Reconaut = outil, fournisseurs externes = subprocessors *de l'opérateur* si activés. Liste des outils que la plateforme fournit pour aider l'opérateur (audit, effacement, configuration de résidence).
+- [ ] **9.2 Doc opérateur : modèle de responsabilité opérationnelle**
+  - **Notes** : `docs/operating/responsibility-model.md` qui explique : l'opérateur applique sa propre éthique/légalité de scan, Reconaut = outil qui applique le scope déclaré, fournisseurs externes (LLM/embedder cloud) sont sous la responsabilité de l'opérateur si activés. Liste des outils opérationnels que la plateforme fournit (audit append-only, effacement par cible, étiquette de résidence). **Pas de framework RGPD applicatif** — Reconaut ne stocke pas de PII (cf. change `drop-gdpr-framing`).
   - **Test plan** : La page existe et est référencée depuis le README et la doc d'installation.
 
 - [ ] **9.3 Doc utilisateur : déclaration de scope**
@@ -221,7 +223,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## Acceptation pour le change dans son ensemble
 
-- [ ] Chaque exigence des spec deltas (`scanning`, `ai-optimization`, `agent-interface`, `mcp-server`, `gdpr-compliance`, `platform`, `open-source-governance`) a au moins un test automatisé passant en CI.
+- [ ] Chaque exigence des spec deltas (`scanning`, `ai-optimization`, `agent-interface`, `mcp-server`, `platform`, `open-source-governance`) a au moins un test automatisé passant en CI. (La capacité `gdpr-compliance` a été retirée par le change `drop-gdpr-framing`.)
 - [ ] La CI rejette toute fusion qui (a) introduit une dépendance avec licence incompatible AGPL, (b) introduit un import de SDK de facturation, (c) introduit un chemin de code conditionné par une variable de licence commerciale.
 - [ ] Une instance auto-hébergée démarre via `docker compose up -d` sans aucune clé API externe configurée et reste pleinement fonctionnelle (scan, agent, MCP) avec l'embedder local.
 - [ ] Aucun appel sortant n'est observable depuis une instance fraîchement bootée avec config par défaut (vérifié par un test réseau qui audite les sockets ouverts pendant 10 minutes).

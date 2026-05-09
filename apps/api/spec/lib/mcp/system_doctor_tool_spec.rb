@@ -55,10 +55,11 @@ RSpec.describe "Mcp::CoreTools system_doctor tool" do
     expect(result[:ok]).to be true
     statuses = result[:checks].to_h { |c| [c[:name], c[:status]] }
     expect(statuses["graph_tier"]).to eq(:ok)
-    expect(statuses["region"]).to eq(:ok)
+    # data_residency : info-level, pas de validation EU (cf. drop-gdpr-framing)
+    expect(statuses["data_residency"]).to eq(:info)
   end
 
-  it "remonte un :fail dans checks quand la region est hors EU" do
+  it "résidence libre acceptée — pas de fail sur étiquette quelconque (cf. drop-gdpr-framing)" do
     bad_probes = happy_probes.merge(region: ->(_) { "us-east-1" })
     Mcp::CoreTools.register_all!(
       retriever:     retriever,
@@ -74,10 +75,10 @@ RSpec.describe "Mcp::CoreTools system_doctor tool" do
       caller_scopes: [:"read:health"]
     )
 
-    expect(result[:ok]).to be false
-    region_check = result[:checks].find { |c| c[:name] == "region" }
-    expect(region_check[:status]).to eq(:fail)
-    expect(region_check[:details]).to include("graph-region-not-allowed")
+    expect(result[:ok]).to be true
+    residency = result[:checks].find { |c| c[:name] == "data_residency" }
+    expect(residency[:status]).to eq(:info)
+    expect(residency[:details]).to include("us-east-1")
   end
 
   it "rejette l'appel sans le scope read:health" do

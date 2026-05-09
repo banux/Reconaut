@@ -136,9 +136,10 @@ Detail complet : [`openspec/project.md`](openspec/project.md).
 
 Bootstrap en cours par iterations OpenSpec :
 
-1. `init-reconaut-platform` - perimetre fondateur (auth, scan, MCP, RGPD)
-2. `add-tech-stack` - layout monorepo + bootstrap Rails / Vue / Go
+1. `init-reconaut-platform` - perimetre fondateur (auth, scan, MCP)
+2. `add-tech-stack` - layout monorepo + bootstrap Rails / Go
 3. `add-graph-retrieval` - couche graphe AGE + retrieval hybride
+4. `drop-gdpr-framing` - retire le cadre RGPD (Reconaut ne stocke pas de PII)
 
 Note de recherche : [`openspec/research/graph-rag.md`](openspec/research/graph-rag.md).
 

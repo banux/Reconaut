@@ -13,8 +13,9 @@ require "json"
 # L'interface publique est volontairement minimale : `record(entry)`.
 # Deux implementations vivent ici :
 #   - InMemoryRecorder : utile en tests et en dev local.
-#   - ActiveRecordRecorder : ecrit sur la table audit_log (cf.
-#     gdpr-compliance) ; sera cable quand le modele AuditLog sera cree.
+#   - ActiveRecordRecorder : ecrit sur la table audit_log (outil
+#     opérationnel, cf. spec `platform` modifiée par `drop-gdpr-framing`) ;
+#     sera cable quand le modele AuditLog sera cree.
 #
 # Le recorder accepte n'importe quel hash respectant le schema d'entree :
 #   {

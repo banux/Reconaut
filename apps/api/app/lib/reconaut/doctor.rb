@@ -19,17 +19,11 @@ module Reconaut
   # simuler une DB EU / non-EU, AGE absent, embedder externe configure,
   # etc., sans avoir a booter Postgres.
   module Doctor
-    EU_REGION_ALLOWLIST = %w[
-      eu-west-1 eu-west-2 eu-west-3
-      eu-central-1 eu-central-2
-      eu-north-1 eu-south-1 eu-south-2
-      europe-west1 europe-west2 europe-west3 europe-west4
-      europe-west6 europe-west8 europe-west9
-      europe-central2 europe-north1
-      fr-par fr-par-1 fr-par-2 nl-ams pl-waw
-      eu-de-1 eu-fr-1
-      eu-1 eu-2
-    ].freeze
+    # NOTE: l'ancienne `EU_REGION_ALLOWLIST` a été retirée par le change
+    # `drop-gdpr-framing`. La résidence des données est désormais une
+    # **étiquette de souveraineté libre** (chaîne quelconque) que
+    # l'opérateur déclare via `RECONAUT_DATA_RESIDENCY`. Aucune
+    # validation EU n'est faite côté projet.
 
     Check = Struct.new(:name, :status, :details, keyword_init: true) do
       def ok?      = status == :ok
@@ -84,7 +78,7 @@ module Reconaut
       checks = []
 
       checks << check_age(probes, ctx)
-      checks << check_region(probes, ctx)
+      checks << check_data_residency(probes, ctx)
       checks << check_graph_lag(probes, ctx)
       checks << check_graph_role(probes, ctx)
       checks << check_external_llm(probes, ctx)
@@ -112,17 +106,23 @@ module Reconaut
       end
     end
 
-    def check_region(probes, ctx)
-      region = probes[:region].call(ctx)
-      if region.nil? || region.to_s.strip.empty?
-        return Check.new(name: "region", status: :fail,
-                         details: "graph-region-unknown: region non declaree")
-      end
-      if EU_REGION_ALLOWLIST.include?(region.to_s)
-        Check.new(name: "region", status: :ok, details: region.to_s)
+    # check_region a été remplacé par check_data_residency : étiquette
+    # de souveraineté libre, info-level seulement, jamais de fail.
+    # Cf. change `drop-gdpr-framing`.
+    def check_data_residency(probes, ctx)
+      label = probes[:region].call(ctx)
+      if label.nil? || label.to_s.strip.empty?
+        Check.new(
+          name:    "data_residency",
+          status:  :unknown,
+          details: "résidence non déclarée — l'opérateur peut la déclarer via RECONAUT_DATA_RESIDENCY"
+        )
       else
-        Check.new(name: "region", status: :fail,
-                  details: "graph-region-not-allowed: #{region.inspect} hors EU/EEE")
+        Check.new(
+          name:    "data_residency",
+          status:  :info,
+          details: "résidence déclarée : #{label}"
+        )
       end
     end
 
