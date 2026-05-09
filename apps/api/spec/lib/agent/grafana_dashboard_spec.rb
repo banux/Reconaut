@@ -19,12 +19,10 @@ RSpec.describe "Grafana graph-retrieval dashboard" do
   CODE_GLOB = File.join(REPO_ROOT, "apps/api/app/lib/**/*.rb").freeze
 
   # Liste des métriques qu'on s'attend à trouver dans le code.
-  # Le panel `graph_lag_seconds` est livré avec §2.3 (projection AGE) ;
-  # il sera réintroduit dans le dashboard quand la métrique sera émise
-  # par la couche de projection.
   EXPECTED_METRICS = %w[
     retrieval_path_total
     retrieval_latency_seconds
+    graph_lag_seconds
     graph_unavailable_total
     graph_template_timeout_total
   ].freeze

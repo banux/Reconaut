@@ -25,15 +25,15 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 2. Pipeline d'ingestion → projection graphe — spec : `graph-retrieval`
 
-- [ ] **2.1 Projection déterministe à partir des résultats de scan**
+- [x] **2.1 Projection déterministe à partir des résultats de scan**
   - **Notes** : Service `GraphProjector` dans Rails appelé après chaque ingestion de `ScanResultV1` (cf. `add-tech-stack`). Utilise upsert idempotent (Cypher `MERGE`) pour les nœuds et arêtes. Aucun appel à l'interface `Embedder` ni à un client LLM externe (Ollama, Mistral, OpenAI-compatible, Anthropic, etc.) dans ce chemin.
   - **Test plan** : Test d'unité qui passe un `ScanResultV1` synthétique (Host H1, Service Modbus S1, Certificate C1 partagé avec H2 préexistant) et assure que le graphe contient les nœuds et arêtes attendus après une seule transaction. Test contractuel : mock outbound (WebMock + sniffing socket) attaché → 0 appel observé vers tout endpoint réseau, quel que soit le provider d'embedder configuré dans le test.
 
-- [ ] **2.2 Idempotence de la projection**
+- [x] **2.2 Idempotence de la projection**
   - **Notes** : Réingérer le même scan ne DOIT pas dupliquer les arêtes. `MERGE` sur les clés naturelles (`host_id`, `cert_sha256`, etc.).
   - **Test plan** : Réinjecter 100 fois le même scan ; le compte d'arêtes du graphe reste constant après la première itération.
 
-- [ ] **2.3 Métrique `graph_lag_seconds`**
+- [x] **2.3 Métrique `graph_lag_seconds`**
   - **Notes** : Histogramme Prometheus émis à chaque projection : `now() - scan.completed_at` au moment où la transaction commit. Buckets adaptés à la cible p95 < 60 s, p99 < 300 s.
   - **Test plan** : Test charge ingère 1000 scans synthétiques sur 60 s ; assure que `histogram_quantile(0.95, graph_lag_seconds_bucket) < 60` et `histogram_quantile(0.99, ...) < 300` à la fin de la fenêtre.
 
