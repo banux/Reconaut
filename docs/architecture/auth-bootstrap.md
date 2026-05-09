@@ -91,9 +91,26 @@ Le linter [`scripts/check_rest_allowlist.sh`](../../scripts/check_rest_allowlist
 
 **Toute autre feature DOIT être ajoutée comme outil MCP**. Le linter est volontairement strict : si une feature ne rentre pas dans MCP (rare), elle exige une PR explicite qui amende l'allowlist, avec justification.
 
+## Storage : ActiveRecord persistant + fallback in-memory
+
+Depuis le change [`add-persistent-auth-storage`](../../openspec/changes/add-persistent-auth-storage/), les `users` et `api_keys` sont **persistés en Postgres** via `Reconaut::Auth::Storage::ActiveRecordUsers` / `ActiveRecordApiKeys`. Conséquences :
+
+- la rake task `reconaut:set_password` (process Ruby distinct) et le serveur Rails (autre process) partagent **la même source de vérité** — fini le 401 `invalid_credentials` après bootstrap.
+- un redémarrage du serveur ne perd ni le user ni ses clés API actives.
+
+`Reconaut::Registry.default` choisit le backend automatiquement :
+
+- ActiveRecord si la connexion Postgres est établie ET la table `users` existe (cas prod / dev / specs DB-bound) ;
+- in-memory sinon (cas tests rapides sans DB câblée).
+
+Les tests unitaires couvrent les deux backends via le module partagé `spec/support/shared_examples/auth_storage.rb` — le contrat (interface, ISO-8601 UTC, hash SHA-256 du token) est identique. Les assertions backend-spécifiques (UUID FK pour AR, OPERATOR_ID symbolique pour in-memory) vivent dans leur fichier respectif.
+
+**Sécurité.** Le token brut n'est JAMAIS persisté — seul le `token_hash` (SHA-256 hex) est stocké, identique au comportement in-memory. La table `api_keys` n'expose aucune colonne `token` plain (vérifiable via `\d api_keys`).
+
 ## Lien avec d'autres changes
 
 - [`mcp-as-primary-entrypoint`](../../openspec/changes/mcp-as-primary-entrypoint/) : ce document sert de référence à la décision de figer l'auth bootstrap en REST.
 - [`single-user-only`](../../openspec/changes/single-user-only/) : modèle mono-utilisateur, simplifie le contrat de `POST /auth/sessions`.
 - [`replace-web-with-tui`](../../openspec/changes/replace-web-with-tui/) : la TUI `reconautctl` est le client REST de référence pour le bootstrap (et le client MCP pour le reste).
 - Future change `remove-rest-wrappers` : retire `ScopesController` / `Agent::ChatController` une fois la TUI stabilisée sur MCP. **Ne touche pas** aux endpoints décrits ici.
+- [`add-persistent-auth-storage`](../../openspec/changes/add-persistent-auth-storage/) : bascule des stores in-memory vers ActiveRecord (Postgres) pour que `reconaut:set_password` et le serveur HTTP partagent la même source de vérité.

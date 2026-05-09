@@ -88,6 +88,7 @@ module Reconaut
       checks << check_schema_versions(probes, ctx)
       checks << check_last_worker(probes, ctx)
       checks << check_ingestion_endpoint(probes, ctx)
+      checks << check_auth_storage(probes, ctx)
 
       # ok = aucun :fail. Les statuts :info (provider externe configure)
       # et :unknown (lag pas encore mesure, normal au boot) sont
@@ -248,6 +249,36 @@ module Reconaut
           details: "tool MCP `ingest_scan_result` non enregistré (registry vide ?)"
         )
       end
+    end
+
+    # auth_storage : backend choisi (active_record / in_memory) +
+    # nombre de users et de clés API actives. Pour valider d'un coup
+    # d'œil que la rake task `reconaut:set_password` et le serveur
+    # voient bien la même base.
+    #
+    # Cf. openspec/changes/add-persistent-auth-storage/tasks.md §7.4.
+    def check_auth_storage(_probes, _ctx)
+      backend, users_count, keys_active = inspect_auth_storage
+      Check.new(
+        name:    "auth_storage",
+        status:  :info,
+        details: { backend: backend, users: users_count, api_keys_active: keys_active }
+      )
+    end
+
+    def inspect_auth_storage
+      reg = ::Reconaut::Registry.default
+      backend = if reg.user_store.is_a?(::Reconaut::Auth::Storage::ActiveRecordUsers)
+                  "active_record"
+                else
+                  "in_memory"
+                end
+
+      users = reg.user_store.list.size
+      keys_active = reg.api_key_store.list.count { |k| !k.revoked? }
+      [backend, users, keys_active]
+    rescue StandardError
+      [backend || "unknown", nil, nil]
     end
   end
 end

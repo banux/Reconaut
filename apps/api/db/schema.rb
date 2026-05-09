@@ -10,11 +10,12 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_09_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_09_120001) do
   create_schema "reconaut"
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "ag_catalog.age"
+  enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
   enable_extension "public.timescaledb"
@@ -100,6 +101,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_09_000001) do
 #   Unknown type 'ag_catalog.graphid' for column 'id'
 
 
+  create_table "reconaut.api_keys", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", precision: nil, default: -> { "now()" }, null: false
+    t.string "prefix", limit: 8, null: false
+    t.datetime "revoked_at", precision: nil
+    t.text "scopes", default: [], null: false, array: true
+    t.string "token_hash", limit: 64, null: false
+    t.uuid "user_id", null: false
+    t.index ["token_hash"], name: "idx_api_keys_token_hash_unique", unique: true
+    t.index ["user_id"], name: "idx_api_keys_user_id"
+  end
+
   create_table "reconaut.audit_log", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "caller_id", limit: 128, null: false
     t.integer "duration_ms"
@@ -174,6 +186,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_09_000001) do
     t.check_constraint "protocol::text = ANY (ARRAY['tcp'::character varying, 'udp'::character varying]::text[])", name: "services_protocol_check"
   end
 
+  create_table "reconaut.users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", precision: nil, default: -> { "now()" }, null: false
+    t.datetime "disabled_at", precision: nil
+    t.citext "email", null: false
+    t.string "password_hash", null: false
+    t.index ["email"], name: "idx_users_email_unique", unique: true
+  end
+
+  add_foreign_key "reconaut.api_keys", "reconaut.users", on_delete: :cascade
   add_foreign_key "reconaut.services", "reconaut.hosts", name: "services_host_id_fkey", on_delete: :cascade
 
 end

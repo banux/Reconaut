@@ -26,12 +26,28 @@ rescue StandardError => e
   warn "[rails_helper] migration test DB a échoué : #{e.class}: #{e.message}"
 end
 
+Dir[Rails.root.join("spec/support/**/*.rb")].each { |f| require f }
+
 RSpec.configure do |config|
   config.fixture_paths = [Rails.root.join("spec/fixtures")]
 
   # Pas de transactional fixtures tant qu'on n'a pas de DB cablee : sinon
   # chaque test essaierait d'ouvrir une transaction qui echoue.
   config.use_transactional_fixtures = false
+
+  # Nettoyage des tables d'auth entre chaque example. Avant
+  # `add-persistent-auth-storage`, le store user/api_key était in-memory
+  # et reset par `Registry.reset!` ; depuis le switch vers ActiveRecord,
+  # l'état persiste en base et peut polluer les examples suivants.
+  config.before(:each) do
+    if defined?(::Reconaut::Auth::ArApiKey) &&
+       ActiveRecord::Base.connection.table_exists?(:api_keys)
+      ::Reconaut::Auth::ArApiKey.delete_all
+      ::Reconaut::Auth::ArUser.delete_all
+    end
+  rescue ActiveRecord::ActiveRecordError, PG::Error
+    # Suite tournant sans DB cablée : on ignore.
+  end
 
   config.filter_rails_from_backtrace!
 end
