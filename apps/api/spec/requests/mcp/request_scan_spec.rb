@@ -57,6 +57,10 @@ RSpec.describe "MCP request_scan", type: :request do
       expect(body[:result][:error]).to eq("out-of-scope")
       # Aucun job enqueued.
       expect(registry.job_bus.size).to eq(0)
+      # Une ligne d'audit est écrite (cf. init-reconaut-platform §5.2).
+      audit_entries = registry.audit_recorder.entries
+      expect(audit_entries.size).to be >= 1
+      expect(audit_entries.last[:template_id]).to eq("mcp:request_scan")
     end
 
     it "200 + scan_id quand la cible est dans le scope" do

@@ -78,13 +78,26 @@ type SSHProbeResult struct {
 	Outcome       string `json:"outcome"`
 }
 
+// ScopeChecker est la garde de défense-en-profondeur invoquée AVANT
+// chaque sonde : si la cible n'est pas couverte par une entrée de
+// scope active, le handler refuse de probe — aucun paquet réseau
+// n'est émis. Quand nil, le handler n'applique pas de garde
+// supplémentaire (Rails reste la garde primaire via ScanEnqueuer).
+//
+// Cf. openspec/changes/init-reconaut-platform/tasks.md §2.2.
+type ScopeChecker interface {
+	IsInScope(ctx context.Context, targetKind, targetValue string) (bool, error)
+}
+
 // Options permet d'injecter des collaborateurs optionnels (DNSProber
 // pour le binaire dns_records, SSHProber pour service_fingerprint,
-// futurs probes pour les autres kinds).
+// ScopeChecker pour la garde de scope côté worker, futurs probes
+// pour les autres kinds).
 type Options struct {
-	DNSProber DNSProber
-	SSHProber SSHProber
-	Clock     func() time.Time
+	DNSProber    DNSProber
+	SSHProber    SSHProber
+	ScopeChecker ScopeChecker
+	Clock        func() time.Time
 }
 
 // New retourne un goodjob.Handler en s'appuyant sur le store pour la
@@ -116,6 +129,21 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 		idemKey, _ := job.Params["idempotency_key"].(string)
 		scanKind, _ := job.Params["scan_kind"].(string)
 		targetKind, targetValue := extractTarget(job.Params)
+
+		// Garde de scope (défense-en-profondeur) — Rails l'a déjà
+		// appliquée avant enqueue, on re-vérifie côté worker pour
+		// couvrir les cas (a) job inséré directement dans good_jobs,
+		// (b) entrée de scope révoquée entre enqueue et claim.
+		// Cf. openspec/changes/init-reconaut-platform/tasks.md §2.2.
+		if opts.ScopeChecker != nil {
+			inScope, err := opts.ScopeChecker.IsInScope(ctx, targetKind, targetValue)
+			if err != nil {
+				return fmt.Errorf("scan_handler: scope check: %w", err)
+			}
+			if !inScope {
+				return persistOutOfScope(ctx, store, clock, idemKey, scanKind, targetKind, targetValue)
+			}
+		}
 
 		// Dispatch par scan_kind.
 		if scanKind == "dns_records" {
@@ -199,6 +227,28 @@ func handleDNSRecords(ctx context.Context, store results.Store, prober DNSProber
 	_, err = store.Insert(ctx, result)
 	if err != nil {
 		return fmt.Errorf("scan_handler: persist dns result: %w", err)
+	}
+	return nil
+}
+
+// persistOutOfScope écrit un Result avec status="out-of-scope" sans
+// jamais invoquer de prober — donc sans jamais ouvrir une connexion
+// réseau vers la cible. Le worker continue à fonctionner pour les
+// jobs suivants. Cf. init-reconaut-platform §2.2 : "pas de paquet
+// réseau émis".
+func persistOutOfScope(ctx context.Context, store results.Store,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string) error {
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         "out-of-scope",
+		ObservedAt:     clock().UTC(),
+	}
+	_, err := store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist out-of-scope: %w", err)
 	}
 	return nil
 }
