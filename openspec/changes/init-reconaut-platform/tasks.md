@@ -20,11 +20,11 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : (a) Test grep CI : aucun import des SDK d'analytics listés ; échec si introduction. (b) Test d'audit réseau : boot avec config par défaut sans variable OTel → 0 connexion sortante vers un endpoint OTel public ou un endpoint d'analytics. (c) Test d'intégration : configurer `OTEL_EXPORTER_OTLP_ENDPOINT` vers un collecteur de test → traces et métriques apparaissent dans le collecteur ; aucune autre destination n'est touchée.
   - **Statut partiel** : (a) `scripts/check_stack.sh` étendu — refus de `mixpanel`, `segment-analytics`, `@segment/analytics`, `amplitude`, `posthog`, `plausible-tracker`, `matomo-tracker` côté apps/api/Gemfile, apps/web/package.json, apps/scanner/go.mod. `scripts/check_stack_test.sh` ajoute deux cas négatifs validés : `posthog-ruby` ajouté au Gemfile → exit ≠ 0 ; `mixpanel-browser` ajouté au package.json → exit ≠ 0. **Reste pour cocher** : (b) test d'audit réseau au boot (à câbler quand OpenTelemetry sera intégré), (c) intégration OTel + test contre un collecteur fake en CI.
 
-- [ ] **1.4 Layout monorepo**
+- [x] **1.4 Layout monorepo**
   - **Notes** : Structure cible (alignée avec `add-tech-stack`) : `apps/api/` (Rails 8 monolithe — API, agent, MCP, audit), `apps/web/` (Vue 3 + Vite), `apps/scanner/` (workers Go), `packages/job-schema/` (schémas de message versionnés), `Dockerfile` par app, `docker-compose.yml` racine pour le dev local et déploiement simple.
   - **Test plan** : `bin/setup` racine installe Ruby, Node, Go ; `bin/test` exécute en parallèle `bundle exec rspec`, `pnpm test`, `go test ./...` ; chaque suite contient un test smoke qui passe.
 
-- [ ] **1.5 Pipeline CI multi-stack (GitHub Actions)**
+- [x] **1.5 Pipeline CI multi-stack (GitHub Actions)**
   - **Notes** : Jobs séparés par app : `api-rubocop`, `api-rspec`, `web-eslint`, `web-vitest`, `scanner-golangci-lint`, `scanner-go-test`, build d'image par app. Cache des dépendances (Bundler, pnpm, Go module cache `~/go/pkg/mod`) keyé par lockfile.
   - **Test plan** : Ouvrir une PR triviale, tous les jobs verts ; introduire une violation volontaire (lint, type) et vérifier que le job correspondant échoue.
 
@@ -44,7 +44,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Notes** : Token-bucket par cible et par AS ; registry de sondeurs pluggable. Mesure NIC d'egress via wrapper autour du dispatcher.
   - **Test plan** : Lever une cible mock locale sur `127.0.0.1` (dans le scope), lancer un scan de 30 secondes contre un AS limité à 50 rps, assurer que le débit mesuré ∈ [0, 55] rps.
 
-- [ ] **2.4 Workflow d'ajout / révocation de scope auditable**
+- [x] **2.4 Workflow d'ajout / révocation de scope auditable**
   - **Notes** : Endpoints `POST /scopes`, `DELETE /scopes/{id}`. Toute mutation écrit une ligne d'audit. UI Vue minimale pour lister, ajouter et révoquer.
   - **Test plan** : Test e2e ajoute une entrée via API ; assure (a) entrée présente, (b) ligne d'audit avec `actor`, `action=scope.created`, `target=<id>`, (c) un scan vers cette cible n'est plus rejeté `out-of-scope`. Révocation : un scan ultérieur est de nouveau rejeté.
   - **Statut** : (a) endpoints `GET/POST/DELETE /scopes` câblés (`apps/api/app/controllers/scopes_controller.rb` + use cases `Scopes::UseCases::List/Add/Revoke`), validation kind ∈ {domain, ip, cidr, host}, RBAC (lecture viewer+, écriture admin/owner) ; (b) audit écrit pour chaque mutation (`success` / `unauthorized` / `param_invalid`) avec `caller_id` + `params_normalized.action ∈ {create, revoke}` ; (c) UI Vue `apps/web/src/components/ScopesPanel.vue` livrée. Stockage `Scopes::Storage::InMemory` (DB-backed à venir avec le modèle `Scope` ActiveRecord). Tests : 12 specs use_case + 7 specs request + 6 specs Vitest UI. **Reste pour cocher** : (d) enforcement côté scanner (un scan vers une cible hors scope est refusé `out-of-scope`) — couvert par la tâche 2.3.
@@ -139,15 +139,15 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 > Section reformulée par le change `drop-gdpr-framing`. Reconaut ne stocke pas de PII et ne fournit pas de framework de conformité dédié. Les trois outils ci-dessous existent comme **outils opérationnels** (forensique, hygiène de la base de connaissance, étiquette de souveraineté) — pas comme conformité.
 
-- [ ] **6.1 Étiquette de résidence des données (souveraineté libre)**
+- [x] **6.1 Étiquette de résidence des données (souveraineté libre)**
   - **Notes** : Variable d'env `RECONAUT_DATA_RESIDENCY` (chaîne libre : `"on-prem-rack-paris-1"`, `"hetzner-fsn1"`, `"aws-eu-west-3"`, `"self-hosted"`, etc.). Le boot logue la valeur. Le doctor expose un check `data_residency` info-level qui rapporte la chaîne. Aucune validation par allowlist EU côté projet — l'étiquette est documentaire.
   - **Test plan** : Test boote avec `RECONAUT_DATA_RESIDENCY=on-prem-rack-paris-1` → la valeur apparaît dans le rapport doctor. Test avec variable absente → check `data_residency` rapporte `:unknown` mais n'échoue pas.
 
-- [ ] **6.2 Workflow d'effacement par cible (outil opérateur)**
+- [x] **6.2 Workflow d'effacement par cible (outil opérateur)**
   - **Notes** : Service `Reconaut::EraseTarget` invocable via tool MCP `erase_target` (ou rake task équivalent). Efface en transaction Postgres : lignes scalaires (`hosts`, `services` rattachés, `scans` matchant), nœuds/arêtes AGE associés. Une ligne d'audit normale est écrite (sans tombstone hashée — l'audit standard suffit). C'est de l'**hygiène opérationnelle** : retirer un hôte qui n'est plus scopé, purger un certificat révoqué, etc.
   - **Test plan** : Test e2e crée des données pour un identifiant, exécute `EraseTarget.call(target:)`, assure (a) absence de l'identifiant dans la couche OLTP et dans le graphe AGE après commit, (b) ligne d'audit avec `actor_key_id`, `target`, `action=erase`, `outcome=success`.
 
-- [ ] **6.3 Journal d'audit append-only**
+- [x] **6.3 Journal d'audit append-only**
   - **Notes** : Table Postgres `audit_log` avec UPDATE/DELETE révoqués pour le rôle applicatif. Outil opérationnel — forensique, debug, accountability vis-à-vis de l'opérateur lui-même. Pas un registre de traitements RGPD. La doc `docs/operating/audit.md` mentionne que la réplication cross-région reste possible (Postgres standard) mais c'est facultatif.
   - **Test plan** : `UPDATE`/`DELETE` direct sur `audit_log` échoue avec erreur de permission et la tentative est elle-même journalisée.
 

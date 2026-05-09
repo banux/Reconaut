@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_08_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_09_000001) do
   create_schema "reconaut"
 
   # These are extensions that must be enabled in order to support this database
@@ -99,6 +99,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_08_000001) do
 # Could not dump table "_ag_label_vertex" because of following StandardError
 #   Unknown type 'ag_catalog.graphid' for column 'id'
 
+
+  create_table "reconaut.audit_log", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "caller_id", limit: 128, null: false
+    t.integer "duration_ms"
+    t.integer "nodes_touched"
+    t.jsonb "params_normalized", default: {}, null: false
+    t.datetime "recorded_at", precision: nil, default: -> { "now()" }, null: false
+    t.string "status", limit: 32, null: false
+    t.string "template_id", limit: 128
+    t.index ["caller_id"], name: "idx_audit_log_caller_id"
+    t.index ["recorded_at"], name: "idx_audit_log_recorded_at"
+    t.index ["template_id"], name: "idx_audit_log_template_id", where: "(template_id IS NOT NULL)"
+  end
 
   create_table "reconaut.hosts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", default: -> { "now()" }, null: false
