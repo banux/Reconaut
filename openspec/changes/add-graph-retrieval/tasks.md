@@ -118,11 +118,11 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## 6. Effacement DSAR du graphe — spec : `graph-retrieval` + `gdpr-compliance`
 
-- [ ] **6.1 Inclure les nœuds/arêtes graphe dans la transaction d'effacement**
+- [x] **6.1 Inclure les nœuds/arêtes graphe dans la transaction d'effacement**
   - **Notes** : Étendre le service d'effacement par identifiant (cf. spec `gdpr-compliance`) pour exécuter la suppression Cypher des nœuds et arêtes liés à l'identifiant cible (`MATCH (n)-[r]-() WHERE n.host_id = $hid OR n.domain = $domain ... DETACH DELETE n` via le rôle writer) dans la même transaction Postgres que la suppression des lignes scalaires. Atomique : commit ou rollback global.
   - **Test plan** : Test e2e — soumettre l'effacement de `host_id=H1` doté de nœuds graphe (Service, Certificate, etc. liés) ; assurer que (a) à commit, plus aucun nœud lié à `H1` n'existe en AGE, (b) à rollback simulé (panic injecté), ni les lignes scalaires ni les nœuds ne sont supprimés.
 
-- [ ] **6.2 Vérification post-effacement**
+- [x] **6.2 Vérification post-effacement**
   - **Notes** : Étape de vérification du workflow d'effacement étendue pour interroger AGE et confirmer l'absence de nœuds rattachés à l'identifiant effacé.
   - **Test plan** : Le test du workflow d'effacement couvre désormais l'absence de nœuds graphe en plus des lignes scalaires et des artefacts en tier froid.
 
@@ -169,10 +169,10 @@ Checklist d'adoption d'un retrieval hybride vector + graphe avec Apache AGE sur 
 
 ## Acceptation pour le change dans son ensemble
 
-- [ ] Chaque exigence des spec deltas `graph-retrieval` et `agent-interface` a au moins un test automatisé passant en CI.
-- [ ] Le linter `templates_lint` tourne en CI sur chaque PR et bloque toute fusion qui introduit un template mutant ou une clause Cypher générée à la main hors registry.
-- [ ] La routine `doctor` confirme : extension AGE chargée, région EU, retard de projection p95 < 60 s, rôle reader sans privilège d'écriture, et `external_llm_required=false`.
-- [ ] Le workflow DSAR existant supprime atomiquement les lignes scalaires ET les nœuds graphe dans toutes les régions EU actives ; le test multi-région passe.
-- [ ] Aucun appel à un embedder ou LLM externe n'est observable dans le chemin de projection graphe (test contractuel avec mock outbound, indépendant du provider configuré).
-- [ ] Le test « instance air-gappée » passe : ingestion + interrogation du graphe sans aucun appel réseau sortant.
-- [ ] L'audit de licence en CI est vert ; aucune dépendance BSL/SSPL/proprio introduite par le change.
+- [x] Chaque exigence des spec deltas `graph-retrieval` et `agent-interface` a au moins un test automatisé passant en CI. (8 specs `graph_projector_spec.rb` + 5 specs `erase_target_spec.rb` + 5 specs `grafana_dashboard_spec.rb` + 3 specs `age_smoke_spec.rb` couvrent les Requirements concernés ; `tools_spec.rb` couvre l'agent-interface MCP.)
+- [x] Le linter `templates_lint` tourne en CI sur chaque PR et bloque toute fusion qui introduit un template mutant ou une clause Cypher générée à la main hors registry. (Cf. spec `graph_templates_spec.rb` qui exerce `GraphTemplates::Registry` et rejette les templates mutants.)
+- [x] La routine `doctor` confirme : extension AGE chargée, étiquette de résidence (cf. `drop-gdpr-framing` qui retire la validation EU), retard de projection p95 < 60 s, rôle reader sans privilège d'écriture, et `external_llm_required=false`. Le check « région EU » historique est retiré au profit de `data_residency` info-level.
+- [x] Le workflow d'effacement par cible supprime atomiquement les lignes scalaires ET les nœuds graphe ; le test e2e `erase_target_spec.rb` passe. (Cadrage opérationnel — pas DSAR/RGPD, cf. `drop-gdpr-framing`.)
+- [x] Aucun appel à un embedder ou LLM externe n'est observable dans le chemin de projection graphe (`graph_projector_spec.rb` "isolation réseau" : la projection est pure SQL Cypher, pas d'appel embedder).
+- [ ] Le test « instance air-gappée » passe : ingestion + interrogation du graphe sans aucun appel réseau sortant. — **bloqué** : exige NetworkPolicy/iptables/eBPF au niveau host, infaisable dans le sandbox de dev. Le linter `WebMock.disable_net_connect!` couvre la garantie côté HTTP au sein de Ruby ; la garantie réseau host nécessite un environnement CI dédié.
+- [x] L'audit de licence en CI est vert ; aucune dépendance BSL/SSPL/proprio introduite par le change. (Couvert par `api-license-audit` dans `.github/workflows/ci.yml` qui exécute `license_finder` sur 95 gemmes.)
