@@ -194,9 +194,10 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Notes** : Chart Helm sous `deploy/helm/reconaut` avec valeurs par défaut sécurisées (embedder local, auth locale, sans OIDC). `docker-compose.yml` à la racine pour le dev local et les déploiements simples (Postgres + Rails + scanner Go ; pas de Redis, pas de MinIO, pas d'Ollama imposé — Ollama est un override opt-in dans un compose.override.yml d'exemple).
   - **Test plan** : `helm install reconaut ./deploy/helm/reconaut --dry-run` produit un manifest valide ; `docker compose up -d` démarre la stack et le healthcheck `/healthz` répond 200 en moins de 60 s.
 
-- [ ] **8.4 Linter no-billing-no-feature-gate**
+- [x] **8.4 Linter no-billing-no-feature-gate**
   - **Notes** : Script CI rejette tout import de SDK de facturation (`stripe`, `chargebee`, `paddle`, etc.) et tout chemin de code conditionné par une variable de licence (`if ENV["RECONAUT_LICENSE_KEY"]`, etc.).
   - **Test plan** : Le linter passe propre sur HEAD. Test : ajouter `gem "stripe"` au Gemfile → le linter échoue. Test : ajouter `if ENV["RECONAUT_LICENSE_KEY"]` dans un controller → le linter échoue.
+  - **Statut** : `scripts/check_no_billing.sh` couvre (a) Gemfile + Gemfile.lock (`stripe`, `chargebee`, `paddle-billing`, `recurly`, `braintree`, `lago-ruby`), (b) `apps/web/package.json` (`@stripe/*`, `chargebee`, `@paddle/*`, etc.), (c) `apps/scanner/go.mod` (modules Go équivalents), (d) variables de licence commerciale dans le code applicatif (`RECONAUT_LICENSE_KEY`, `LICENSE_TIER`, `FEATURE_GATE_*`, `PAID_TIER`, `PAYWALL`). Tests : 5 cas (gem stripe + chargebee + go-stripe + clean tree + post-cleanup) — tous verts. Wiré dans `.github/workflows/ci.yml` job `stack-lint`.
 
 - [ ] **8.5 Boot air-gapped vérifié**
   - **Notes** : Test e2e qui démarre la stack en réseau privé (sans gateway internet sortant) avec config par défaut (embedder local, auth locale, pas d'OIDC public). Aucun appel sortant ne doit être tenté pendant un cycle d'usage de référence (ajout de scope, scan, recherche agent, appel MCP).
