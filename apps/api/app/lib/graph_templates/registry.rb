@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Registre des templates Cypher parametres consommes par l'agent.
 #

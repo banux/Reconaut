@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // scanner-service_fingerprint : binaire spécialisé `scan:service_fingerprint`.
 package main
 

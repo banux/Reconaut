@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // reconautctl : binaire opérateur Reconaut.
 //
 // Toutes les opérations métier passent par MCP HTTP+SSE.

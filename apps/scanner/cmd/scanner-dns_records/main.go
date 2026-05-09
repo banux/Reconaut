@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // scanner-dns_records : binaire spécialisé `scan:dns_records`. Cf.
 // openspec/changes/add-dns-records-scanner/specs/architecture/spec.md.
 //

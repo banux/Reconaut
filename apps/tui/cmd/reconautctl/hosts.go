@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sous-commande `reconautctl hosts` : invoque search_hosts / get_host.
 package main
 

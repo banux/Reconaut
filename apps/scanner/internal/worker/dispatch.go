@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package worker - dispatch with panic recovery.
 //
 // Spec source: openspec/changes/add-tech-stack/specs/architecture/spec.md

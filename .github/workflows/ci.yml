@@ -31,6 +31,9 @@ jobs:
       # Linter spécialisation scanners. Cf. replace-web-with-tui §3.3.
       - run: bash scripts/check_scanner_specialization.sh
       - run: bash scripts/check_scanner_specialization_test.sh
+      # Linter SPDX-License-Identifier headers. Cf. init-reconaut-platform §1.1.
+      - run: bash scripts/check_spdx_headers.sh
+      - run: bash scripts/check_spdx_headers_test.sh
 
   api-rspec:
     name: api-rspec

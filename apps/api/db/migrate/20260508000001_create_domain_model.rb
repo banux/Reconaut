@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Modèle de domaine fondamental de Reconaut : scope, hosts, services,
 # scans. Cf. openspec/changes/init-reconaut-platform/specs/scanning/spec.md

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // scanner-tls_capture : binaire spécialisé `scan:tls_capture`.
 package main
 

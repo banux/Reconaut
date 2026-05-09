@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sous-commande `reconautctl agent` : invoque agent_chat en streaming
 // SSE. Chaque chunk reçu est rendu au fur et à mesure.
 package main

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package goodjob — in-memory Store for tests and dev local stub.
 
 package goodjob

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package main is the entrypoint for the scanner-worker binary.
 //
 // Spec source: openspec/changes/add-tech-stack/specs/architecture/spec.md

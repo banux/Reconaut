@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package goodjob implements the Go-side consumer of the GoodJob queue
 // shared with the Rails monolith.
 //

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Registre des outils MCP exposes via /mcp/tools/*. Source de verite :
 #   openspec/changes/init-reconaut-platform/specs/mcp-server/spec.md

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package scanhandler builds the goodjob.Handler executed per scan
 // job by the scanner-<kind> binaries.
 //

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Enregistrement des outils MCP au boot du process Rails. Sans cet
 # initializer, le ToolRegistry est vide en production et les routes

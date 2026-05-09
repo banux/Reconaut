@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // scanner-http_banner : binaire spécialisé `scan:http_banner`.
 package main
 

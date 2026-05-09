@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // scanner-worker — DB connection helper.
 //
 // Le branchement réel d'un driver Postgres (pgx via stdlib, lib/pq) est

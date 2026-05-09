@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package dnsprobe résout les enregistrements DNS d'un domaine ou
 // d'un host.
 //

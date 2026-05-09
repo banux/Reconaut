@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Cree les labels de noeuds, les types d'aretes et les index AGE
 # necessaires aux templates du set noyau.

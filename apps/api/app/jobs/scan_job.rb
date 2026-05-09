@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # ScanJob : ActiveJob qui transporte un payload `ScanJobV1` validé jusqu'à
 # la table `good_jobs`. Le worker Go consomme ensuite directement la table.

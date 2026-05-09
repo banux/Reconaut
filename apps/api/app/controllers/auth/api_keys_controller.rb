@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 module Auth
   # POST   /auth/api_keys           : crée une clé API personnelle pour

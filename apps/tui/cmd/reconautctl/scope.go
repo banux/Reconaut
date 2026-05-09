@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sous-commande `reconautctl scope` : invoque les outils MCP
 // list_scopes / add_scope / revoke_scope. Aucune route REST n'est
 // appelée — c'est le pacte avec le linter §3.3.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package runtime assemble la boucle goodjob + le handler scan +
 // l'ouverture de la connexion DB. Un binaire scanner-<kind> appelle
 // `runtime.Run(scanKind)` et c'est tout.

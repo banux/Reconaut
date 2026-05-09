@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package mcp fournit un client minimal du transport MCP HTTP+SSE
 // utilisé par le binaire reconautctl pour invoquer les outils MCP
 // exposés par le serveur Rails.

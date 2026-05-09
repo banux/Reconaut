@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Active les trois extensions Postgres exigees par project.md :
 #   - timescaledb : timeseries de scan

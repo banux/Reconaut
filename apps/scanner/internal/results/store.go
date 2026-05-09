@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package results stores the outcomes produced by the scan worker
 // after handling a job.
 //

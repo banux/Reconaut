@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Reconaut est tenant unique en v1 (cf. spec `platform` et project.md).
 # Toute requete API qui contient un parametre `tenant_id` ou un header

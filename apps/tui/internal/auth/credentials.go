@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package auth gère le stockage local de la clé API personnelle de
 // l'opérateur après `reconautctl login`.
 //

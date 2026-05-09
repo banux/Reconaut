@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sous-commande `reconautctl doctor` : invoque system_doctor.
 package main
 

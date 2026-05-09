@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 require_relative "../agent/audit_recorder"
 require_relative "../../use_cases/scopes/storage"

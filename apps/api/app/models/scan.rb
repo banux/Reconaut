@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Scan : matérialisation persistante d'un job de scan. Sert aux outils
 # MCP `list_scans` / `get_scan_status` (cf. mcp-as-primary-entrypoint

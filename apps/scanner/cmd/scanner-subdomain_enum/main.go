@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // scanner-subdomain_enum : binaire spécialisé `scan:subdomain_enum`.
 package main
 

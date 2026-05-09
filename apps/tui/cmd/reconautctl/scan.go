@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sous-commande `reconautctl scan` : invoque request_scan / list_scans
 // / get_scan_status. Routes : /mcp/* uniquement.
 package main

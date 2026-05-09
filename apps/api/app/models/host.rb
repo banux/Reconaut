@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Host : cible identifiée par son IP et/ou son FQDN. Au moins un des
 # deux doit être présent (contrainte SQL `hosts_at_least_one_identifier`).

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Healthcheck non authentifié : `GET /healthz` -> 200 + {"status":"ok"}.
 # Cible : load-balancer / k8s probes / prometheus blackbox.

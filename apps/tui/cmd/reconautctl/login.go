@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sous-commande `reconautctl login` : exception au pacte MCP-only.
 // Appelle POST /auth/sessions pour obtenir une clé API personnelle puis
 // la persiste sous $XDG_CONFIG_HOME/reconaut/credentials (fichier 0600,

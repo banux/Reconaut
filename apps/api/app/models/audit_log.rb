@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # AuditLog : journal append-only des actions opérateur côté serveur.
 # Cf. openspec/changes/init-reconaut-platform/tasks.md §6.3 (reformulé

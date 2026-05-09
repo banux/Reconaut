@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 

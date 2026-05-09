@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package worker contains the scanner worker primitives.
 //
 // Iteration courante : seulement la constante Version exposee. La boucle

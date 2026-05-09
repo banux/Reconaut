@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package goodjob — SQL-backed Store implementation.
 //
 // Uses `database/sql` so any driver (lib/pq, pgx via stdlib mode) works.

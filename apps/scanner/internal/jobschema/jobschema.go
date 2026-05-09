@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Package jobschema loads and validates the canonical JSON schemas
 // shared between Rails (apps/api) and the Go workers (apps/scanner).
 //

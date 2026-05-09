@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # Service : un (host, port, protocol) observé à un instant `scanned_at`.
 # Stocké dans une hypertable TimescaleDB partitionnée sur `scanned_at`

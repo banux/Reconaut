@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 # IdentityResolver : resoud l'identite de l'opérateur unique a partir
 # du header `Authorization: Bearer <api_key>`. Aucune notion de role

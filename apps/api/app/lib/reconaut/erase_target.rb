@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# SPDX-License-Identifier: AGPL-3.0-only
 
 module Reconaut
   # EraseTarget : efface en transaction Postgres toutes les données
