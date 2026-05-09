@@ -34,6 +34,9 @@ jobs:
       # Linter SPDX-License-Identifier headers. Cf. init-reconaut-platform §1.1.
       - run: bash scripts/check_spdx_headers.sh
       - run: bash scripts/check_spdx_headers_test.sh
+      # Linter anti-auth du sondeur SSH. Cf. add-ssh-probe §1.3.
+      - run: bash scripts/check_ssh_probe_no_auth.sh
+      - run: bash scripts/check_ssh_probe_no_auth_test.sh
 
   api-rspec:
     name: api-rspec

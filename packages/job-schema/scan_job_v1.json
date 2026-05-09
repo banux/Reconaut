@@ -58,6 +58,10 @@
     "options": {
       "type": "object",
       "description": "Parametres specifiques au scan_kind. Schema typage par scan_kind viendra dans un change ulterieur."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Findings prealables (ex: ports detectes par tcp_probe) consommes par les scans en aval comme service_fingerprint pour decider quel sondeur de protocole invoquer. Cf. add-ssh-probe."
     }
   }
 }

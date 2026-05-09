@@ -57,10 +57,33 @@ type ResolvedRecord struct {
 	TTL        uint32
 }
 
+// SSHProber est l'interface invoquée pour les jobs
+// scan_kind="service_fingerprint" qui ciblent un host avec port=22 (ou
+// options.protocols inclut "ssh"). Le binaire scanner-service_fingerprint
+// injecte une implémentation backée par internal/sshprobe.
+//
+// Cf. openspec/changes/add-ssh-probe/tasks.md §2.1.
+type SSHProber interface {
+	Probe(ctx context.Context, target string, port int) (SSHProbeResult, error)
+}
+
+// SSHProbeResult est le format minimal qu'un SSHProber retourne au
+// handler. Mappable 1:1 avec sshprobe.Result sans coupler ce package
+// à sshprobe.
+type SSHProbeResult struct {
+	Banner        string `json:"banner"`
+	HostKeySHA256 string `json:"hostkey_sha256"`
+	DurationMs    int    `json:"duration_ms"`
+	BytesReceived int    `json:"bytes_received"`
+	Outcome       string `json:"outcome"`
+}
+
 // Options permet d'injecter des collaborateurs optionnels (DNSProber
-// pour le binaire dns_records, futurs probes pour les autres kinds).
+// pour le binaire dns_records, SSHProber pour service_fingerprint,
+// futurs probes pour les autres kinds).
 type Options struct {
 	DNSProber DNSProber
+	SSHProber SSHProber
 	Clock     func() time.Time
 }
 
@@ -97,6 +120,10 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 		// Dispatch par scan_kind.
 		if scanKind == "dns_records" {
 			return handleDNSRecords(ctx, store, opts.DNSProber, clock, idemKey, scanKind, targetKind, targetValue)
+		}
+
+		if scanKind == "service_fingerprint" && shouldProbeSSH(job.Params) {
+			return handleSSHProbe(ctx, store, opts.SSHProber, clock, idemKey, scanKind, targetKind, targetValue, sshPort(job.Params))
 		}
 
 		// Placeholder no-op : la vraie sonde sera livrée par les
@@ -184,4 +211,162 @@ func extractTarget(params map[string]any) (string, string) {
 	kind, _ := target["kind"].(string)
 	value, _ := target["value"].(string)
 	return kind, value
+}
+
+// shouldProbeSSH décide si un job service_fingerprint doit déclencher
+// le sondeur SSH. Critères (cf. add-ssh-probe §2.1) :
+//
+//   - target_kind ∈ {ip, host}
+//   - findings contient {port: 22}, OU options.protocols inclut "ssh"
+//
+// Si le payload ne précise rien, on retourne false : le sondeur n'est
+// pas invoqué tant qu'un autre acteur (le scanner tcp_probe en amont,
+// ou un agent IA) n'a pas déclaré le port 22 ouvert.
+func shouldProbeSSH(params map[string]any) bool {
+	targetKind, _ := extractTarget(params)
+	if targetKind != "ip" && targetKind != "host" {
+		return false
+	}
+	if hasPortInFindings(params, 22) {
+		return true
+	}
+	if hasProtocolInOptions(params, "ssh") {
+		return true
+	}
+	return false
+}
+
+// sshPort retourne le port SSH à sonder, par défaut 22. Permet de
+// supporter dans le futur des serveurs SSH sur ports non-standard
+// (cf. proposal "Configuration de port non-standard" dans le différé).
+func sshPort(params map[string]any) int {
+	if p, ok := portFromFindings(params, "ssh"); ok {
+		return p
+	}
+	if p, ok := portFromFindings(params, ""); ok {
+		return p
+	}
+	return 22
+}
+
+// hasPortInFindings inspecte params["findings"] (slice de
+// map[string]any) à la recherche d'un objet portant {port: <port>}.
+func hasPortInFindings(params map[string]any, want int) bool {
+	findings, ok := params["findings"].([]any)
+	if !ok {
+		return false
+	}
+	for _, f := range findings {
+		fmap, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		port, _ := numberAsInt(fmap["port"])
+		if port == want {
+			return true
+		}
+	}
+	return false
+}
+
+// hasProtocolInOptions inspecte params["options"]["protocols"] (slice
+// de string) à la recherche d'un protocole donné.
+func hasProtocolInOptions(params map[string]any, want string) bool {
+	options, ok := params["options"].(map[string]any)
+	if !ok {
+		return false
+	}
+	protos, ok := options["protocols"].([]any)
+	if !ok {
+		return false
+	}
+	for _, p := range protos {
+		s, _ := p.(string)
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
+// portFromFindings retourne le premier port trouvé dans findings,
+// optionnellement filtré par protocole.
+func portFromFindings(params map[string]any, proto string) (int, bool) {
+	findings, ok := params["findings"].([]any)
+	if !ok {
+		return 0, false
+	}
+	for _, f := range findings {
+		fmap, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		if proto != "" {
+			p, _ := fmap["protocol"].(string)
+			if p != proto {
+				continue
+			}
+		}
+		port, ok := numberAsInt(fmap["port"])
+		if ok {
+			return port, true
+		}
+	}
+	return 0, false
+}
+
+func numberAsInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	}
+	return 0, false
+}
+
+// handleSSHProbe applique la sonde SSH et persiste un Result dont le
+// champ Status sérialise en JSON le SSHProbeResult.
+func handleSSHProbe(ctx context.Context, store results.Store, prober SSHProber,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string, port int) error {
+	if prober == nil {
+		// Worker démarré sans SSHProber : on persiste un résultat
+		// "no-op" plutôt que de refuser, pour ne pas bloquer la file
+		// pendant le câblage.
+		result := results.Result{
+			IdempotencyKey: idemKey,
+			ScanKind:       scanKind,
+			TargetKind:     targetKind,
+			TargetValue:    targetValue,
+			Status:         "skipped (no SSHProber wired)",
+			ObservedAt:     clock().UTC(),
+		}
+		_, err := store.Insert(ctx, result)
+		return err
+	}
+
+	probeRes, err := prober.Probe(ctx, targetValue, port)
+	if err != nil {
+		return fmt.Errorf("scan_handler: ssh probe: %w", err)
+	}
+
+	payload, err := json.Marshal(probeRes)
+	if err != nil {
+		return fmt.Errorf("scan_handler: marshal ssh probe result: %w", err)
+	}
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         string(payload),
+		ObservedAt:     clock().UTC(),
+	}
+	_, err = store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist ssh result: %w", err)
+	}
+	return nil
 }

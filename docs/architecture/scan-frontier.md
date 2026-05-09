@@ -31,6 +31,16 @@ resout les enregistrements DNS publics (A, AAAA, MX, NS, TXT, CAA,
 SOA, CNAME) d'un domaine couvert par le scope. Pas d'AXFR. Resolveur
 configurable via `RECONAUT_DNS_RESOLVER`.
 
+`service_fingerprint` (cf. change [`add-ssh-probe`](../../openspec/changes/add-ssh-probe/proposal.md))
+expose le **premier sondeur applicatif livré** : SSH banner + host-key
+SHA-256 sur TCP/22. Le sondeur ne tente JAMAIS d'authentification (pas
+de password, pas de clé, pas de keyboard-interactive). Il capture la
+host-key via `HostKeyCallback` puis interrompt le handshake AVANT toute
+phase userauth ; un linter CI (`scripts/check_ssh_probe_no_auth.sh`)
+garantit l'invariant. Timeout configurable via
+`RECONAUT_SSH_PROBE_TIMEOUT` (défaut 5 s). Les sondeurs HTTP, RDP,
+MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
+
 ## Principes intangibles
 
 1. **Pas d'appel synchrone Rails -> Go.** Aucun HTTP, aucun gRPC, aucun
