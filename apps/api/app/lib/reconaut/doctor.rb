@@ -89,6 +89,7 @@ module Reconaut
       checks << check_last_worker(probes, ctx)
       checks << check_ingestion_endpoint(probes, ctx)
       checks << check_auth_storage(probes, ctx)
+      checks << check_mcp_tls_posture(probes, ctx)
 
       # ok = aucun :fail. Les statuts :info (provider externe configure)
       # et :unknown (lag pas encore mesure, normal au boot) sont
@@ -263,6 +264,18 @@ module Reconaut
         name:    "auth_storage",
         status:  :info,
         details: { backend: backend, users: users_count, api_keys_active: keys_active }
+      )
+    end
+
+    # mcp_tls_posture : valeur effective de RECONAUT_MCP_TLS_REQUIRED.
+    # Cf. init-reconaut-platform §5.5 + line 236 acceptance.
+    def check_mcp_tls_posture(_probes, _ctx)
+      required = defined?(::Mcp::TlsPosture) ? ::Mcp::TlsPosture.required? : true
+      Check.new(
+        name:    "mcp_tls_posture",
+        status:  :info,
+        details: required ? "mcp.tls.required=true posture=internet-facing"
+                          : "mcp.tls.required=false posture=internal"
       )
     end
 

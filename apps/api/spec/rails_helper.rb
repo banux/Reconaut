@@ -4,6 +4,12 @@
 # `pending` / un tag `:db` une fois docker-compose up.
 require "spec_helper"
 ENV["RAILS_ENV"] ||= "test"
+# Posture TLS par défaut en test : permet le trafic en clair via
+# Rack::Test pour ne pas forcer chaque request spec à injecter
+# `X-Forwarded-Proto: https`. Les specs qui valident l'enforcement
+# TLS (`spec/requests/mcp/tls_posture_spec.rb`) overrident cette
+# valeur via `around { |ex| ENV[...] = "..." }`.
+ENV["RECONAUT_MCP_TLS_REQUIRED"] ||= "false"
 require_relative "../config/environment"
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require "rspec/rails"

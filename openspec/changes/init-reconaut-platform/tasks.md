@@ -131,9 +131,10 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Test d'intégration invoque chaque outil une fois et assure qu'une ligne d'audit correspondante existe en moins de 1 s avec `key_id`, `tool_name`, `duration_ms`.
   - **Statut** : `Mcp::ToolsController#audit` écrit une entrée pour chaque chemin (`success`, `unknown_template` sur outil inconnu, `unauthorized` sur scope manquant, `param_invalid` sur params hors plage). `template_id` = `mcp:<tool_name>`, `caller_id` propagé. 2 specs request : invocation réussie → `:success`, outil inconnu → `:unknown_template`. La latence p95 < 1 s sera mesurée en CI quand le recorder DB sera câblé (§ 6).
 
-- [ ] **5.5 TLS configurable selon la posture**
+- [x] **5.5 TLS configurable selon la posture**
   - **Notes** : `mcp.tls.required=true` (défaut) refuse les connexions en clair. `mcp.tls.required=false` (déploiement strictement interne avec mTLS au reverse proxy) accepte les connexions amont en clair ; le boot logue cette posture.
   - **Test plan** : Avec `tls.required=true` : tentative HTTP en clair refusée avec raison `tls-required` ; HTTPS valide réussit. Avec `tls.required=false` : tentative HTTP en clair acceptée et le log de boot mentionne `mcp.tls.required=false posture=internal`.
+  - **Statut** : `Mcp::TlsPosture` (lib) + concern `McpTlsPosture` (avant_action sur `Mcp::ToolsController`) + initializer `mcp_tls_posture.rb` qui logue au boot. Variable d'env `RECONAUT_MCP_TLS_REQUIRED` (défaut required ; `false`/`0`/`no` → posture interne). Détection : `request.ssl?` OR header `X-Forwarded-Proto: https` (TLS terminé en amont). Refus = `426 Upgrade Required` + header `X-Reconaut-Reason: tls-required`. 7 tests (request specs : 426 sur clair en mode required, 200 avec X-Forwarded-Proto, clair toléré en mode internal ; helper : défaut required, false/0/no → not required, log warn `posture=internal`, log info `posture=internet-facing`). Le test env (`rails_helper`) défaut à `false` pour ne pas casser les Rack::Test ; les specs qui valident le 426 le ré-activent via `around`.
 
 ---
 
@@ -227,10 +228,14 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 ## Acceptation pour le change dans son ensemble
 
 - [ ] Chaque exigence des spec deltas (`scanning`, `ai-optimization`, `agent-interface`, `mcp-server`, `platform`, `open-source-governance`) a au moins un test automatisé passant en CI. (La capacité `gdpr-compliance` a été retirée par le change `drop-gdpr-framing`.)
-- [ ] La CI rejette toute fusion qui (a) introduit une dépendance avec licence incompatible AGPL, (b) introduit un import de SDK de facturation, (c) introduit un chemin de code conditionné par une variable de licence commerciale.
+- [x] La CI rejette toute fusion qui (a) introduit une dépendance avec licence incompatible AGPL, (b) introduit un import de SDK de facturation, (c) introduit un chemin de code conditionné par une variable de licence commerciale.
+  - **Statut** : (a) `bundle exec license_finder action_items --decisions-file doc/dependency_decisions.yml` tourne dans le job `agpl-license-finder` (cf. `.github/workflows/ci.yml`) ; (b) + (c) couverts par `scripts/check_no_billing.sh` wiré dans `stack-lint` (§8.4).
 - [ ] Une instance auto-hébergée démarre via `docker compose up -d` sans aucune clé API externe configurée et reste pleinement fonctionnelle (scan, agent, MCP) avec l'embedder local.
 - [ ] Aucun appel sortant n'est observable depuis une instance fraîchement bootée avec config par défaut (vérifié par un test réseau qui audite les sockets ouverts pendant 10 minutes).
-- [ ] Le scanner refuse en dur toute cible hors scope déclaré (test rouge avec une cible non-scope, statut `out-of-scope`, zéro paquet réseau).
-- [ ] Le modèle tenant unique est imposé : aucune colonne `tenant_id` dans les migrations, l'API rejette tout paramètre de tenant, l'UI n'expose pas de sélecteur.
+- [x] Le scanner refuse en dur toute cible hors scope déclaré (test rouge avec une cible non-scope, statut `out-of-scope`, zéro paquet réseau).
+  - **Statut** : Double garde — Rails (`Reconaut::ScanEnqueuer.ensure_in_scope!` rejette avant enqueue, cf. §5.2) ET worker Go (`scopechecker.Checker` ré-applique avant chaque sonde, cf. §2.2). Test `TestScopeGuard_RefusesOutOfScopeTarget` asserte `prober.calls == 0` quand la cible est hors scope (zéro paquet réseau émis).
+- [x] Le modèle tenant unique est imposé : aucune colonne `tenant_id` dans les migrations, l'API rejette tout paramètre de tenant, l'UI n'expose pas de sélecteur.
+  - **Statut** : (a) `scripts/check_stack.sh` rejette `tenant_id` dans toute migration Rails et tout fichier Go ; (b) `app/controllers/concerns/tenant_param_rejection.rb` refuse 400 `tenant_param_unsupported` sur tout paramètre `tenant_id` / `tenant` / `caller_tenant` / `org_id` et tout header `X-Tenant` AVANT toute logique métier ; (c) la SPA Vue a été retirée par `replace-web-with-tui` — la TUI Go `reconautctl` ne porte aucun sélecteur de tenant.
 - [ ] Une release publique a été produite avec image OCI multi-arch signée et SBOM CycloneDX attaché.
-- [ ] Une commande de self-check documentée (`bin/doctor` ou `rails reconaut:doctor`) imprime région, défauts de rétention, fingerprint du provider d'embedding actif (local / Ollama / Mistral / OpenAI-compatible), posture TLS MCP, taille de la file `good_jobs`.
+- [x] Une commande de self-check documentée (`bin/doctor` ou `rails reconaut:doctor`) imprime région, défauts de rétention, fingerprint du provider d'embedding actif (local / Ollama / Mistral / OpenAI-compatible), posture TLS MCP, taille de la file `good_jobs`.
+  - **Statut** : `bundle exec rails reconaut:doctor` imprime un rapport JSON avec les checks : `data_residency` (région), `graph_lag_p95` (lag de projection), `external_llm` (fingerprint embedder), `good_jobs_pending` (taille file), `auth_storage` (backend + count), `mcp_tls_posture` (required/internal). Tous statuts `:info`/`:ok` quand la stack tourne.

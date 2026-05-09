@@ -19,6 +19,7 @@ require_relative "../../lib/mcp/agent_chat_streamer"
 # détermine ce que l'appelant peut faire. Aucune notion de rôle.
 module Mcp
   class ToolsController < ApplicationController
+    include McpTlsPosture
     include ActionController::Live
     include IdentityResolver
 
