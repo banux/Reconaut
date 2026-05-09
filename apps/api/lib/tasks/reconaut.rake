@@ -17,8 +17,6 @@ require "json"
 namespace :reconaut do
   desc "Self-check : extension AGE, étiquette de résidence, lag de projection, role reader, provider d'embedder"
   task doctor: :environment do
-    require "reconaut/doctor"
-
     probes = {
       age_loaded?: ->(_ctx) {
         begin
@@ -90,8 +88,6 @@ namespace :reconaut do
        "deja sauf si RECONAUT_ROTATE=true (qui rote le password ET révoque toutes les " \
        "clés API existantes). Lit RECONAUT_OPERATOR_PASSWORD."
   task set_password: :environment do
-    require "reconaut/auth/bootstrap"
-
     email    = ENV["RECONAUT_OPERATOR_EMAIL"].to_s.strip
     password = ENV["RECONAUT_OPERATOR_PASSWORD"].to_s
     rotate   = %w[true 1 yes].include?(ENV["RECONAUT_ROTATE"].to_s.downcase)
@@ -131,8 +127,6 @@ namespace :reconaut do
   desc "[deprecated] Alias de set_password. Utilise les nouvelles variables " \
        "RECONAUT_OPERATOR_EMAIL et RECONAUT_OPERATOR_PASSWORD."
   task bootstrap_owner: :environment do
-    require "reconaut/auth/bootstrap"
-
     email    = (ENV["RECONAUT_OPERATOR_EMAIL"] || ENV["RECONAUT_BOOTSTRAP_OWNER_EMAIL"]).to_s.strip
     password = (ENV["RECONAUT_OPERATOR_PASSWORD"] || ENV["RECONAUT_BOOTSTRAP_OWNER_PASSWORD"]).to_s
 
