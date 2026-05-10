@@ -1,6 +1,6 @@
 # Reconaut — base de connaissance pour agents IA
 
-Statut : **acté** par le change [`reposition-as-agent-knowledge-base`](../../openspec/changes/reposition-as-agent-knowledge-base/proposal.md).
+Statut : **acté** par le change [`reposition-as-agent-knowledge-base`](https://github.com/banux/Reconaut/blob/main/openspec/changes/reposition-as-agent-knowledge-base/proposal.md).
 Audience : opérateur qui évalue Reconaut, contributeur qui veut comprendre où va le produit.
 
 ## TL;DR
@@ -12,7 +12,7 @@ Audience : opérateur qui évalue Reconaut, contributeur qui veut comprendre où
 
 ## Le persona
 
-Auparavant, Reconaut visait l'analyste SOC qui clique dans une UI. Avec le pivot MCP-first ([`mcp-as-primary-entrypoint`](../../openspec/changes/mcp-as-primary-entrypoint/)), la TUI Go ([`replace-web-with-tui`](../../openspec/changes/replace-web-with-tui/)) et le mono-user ([`single-user-only`](../../openspec/changes/single-user-only/)), ce persona ne tient plus.
+Auparavant, Reconaut visait l'analyste SOC qui clique dans une UI. Avec le pivot MCP-first ([`mcp-as-primary-entrypoint`](https://github.com/banux/Reconaut/blob/main/openspec/changes/mcp-as-primary-entrypoint/)), la TUI Go ([`replace-web-with-tui`](https://github.com/banux/Reconaut/blob/main/openspec/changes/replace-web-with-tui/)) et le mono-user ([`single-user-only`](https://github.com/banux/Reconaut/blob/main/openspec/changes/single-user-only/)), ce persona ne tient plus.
 
 **Le persona aujourd'hui** :
 
@@ -62,7 +62,7 @@ L'opérateur compose Reconaut avec ses propres outils plutôt que de migrer son 
 ## Ce que Reconaut N'EST PAS
 
 - ❌ **Un dashboard SOC autonome.** Pas de graphique de tendances, pas de heatmap de risque, pas de workflow ticketing intégré. L'opérateur compose ces capacités lui-même via ses propres outils + son agent IA qui interroge Reconaut.
-- ❌ **Un outil multi-utilisateurs.** Une instance = un opérateur. Si plusieurs humains veulent travailler sur la même surface, ils déploient plusieurs instances (cf. [`single-user-only`](../../openspec/changes/single-user-only/)).
+- ❌ **Un outil multi-utilisateurs.** Une instance = un opérateur. Si plusieurs humains veulent travailler sur la même surface, ils déploient plusieurs instances (cf. [`single-user-only`](https://github.com/banux/Reconaut/blob/main/openspec/changes/single-user-only/)).
 - ❌ **Un Shodan-like.** Pas de découverte du grand internet, pas de balayage non autorisé. Tout est scope-driven.
 - ❌ **Un produit SaaS managé.** Distribution OSS auto-hébergée. AGPL-3.0-only.
 
@@ -78,7 +78,7 @@ L'opérateur compose Reconaut avec ses propres outils plutôt que de migrer son 
 
 ## Liens
 
-- [Proposal `reposition-as-agent-knowledge-base`](../../openspec/changes/reposition-as-agent-knowledge-base/proposal.md) — la décision et son raisonnement.
+- [Proposal `reposition-as-agent-knowledge-base`](https://github.com/banux/Reconaut/blob/main/openspec/changes/reposition-as-agent-knowledge-base/proposal.md) — la décision et son raisonnement.
 - [`docs/architecture/mcp-first.md`](../architecture/mcp-first.md) — pourquoi MCP est le canal principal.
 - [`docs/integrations/external-scanners.md`](../integrations/external-scanners.md) — comment pousser un résultat de scan externe via `ingest_scan_result`.
-- [Spec `integrations`](../../openspec/changes/reposition-as-agent-knowledge-base/specs/integrations/spec.md) — Requirement *Inbound Integration via ScanResultV1*.
+- [Spec `integrations`](https://github.com/banux/Reconaut/blob/main/openspec/changes/reposition-as-agent-knowledge-base/specs/integrations/spec.md) — Requirement *Inbound Integration via ScanResultV1*.

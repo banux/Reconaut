@@ -1,0 +1,14 @@
+# Dépendances Python build-only pour le site de doc MkDocs Material.
+#
+# Cf. openspec/changes/add-doc-site/proposal.md
+#
+# Versions épinglées pour reproductibilité du build CI. Renouveler
+# manuellement après revue (changelog mkdocs-material en particulier).
+#
+# Aucune de ces déps ne pollue la stack runtime — elles sont
+# consommées uniquement par le job CI `docs.yml` et par les
+# contributeurs qui font `mkdocs serve` localement dans un venv.
+
+mkdocs==1.6.1
+mkdocs-material==9.5.49
+pymdown-extensions==10.14

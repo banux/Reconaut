@@ -7,7 +7,7 @@ Ce document explique le modèle **scope-driven** de Reconaut, comment déclarer 
 
 ## Pourquoi un scope ?
 
-Reconaut **refuse en dur** de scanner toute cible qui n'est pas explicitement déclarée par l'opérateur. C'est la frontière éthique et légale du produit — l'invariant central de [`openspec/project.md`](../../openspec/project.md) :
+Reconaut **refuse en dur** de scanner toute cible qui n'est pas explicitement déclarée par l'opérateur. C'est la frontière éthique et légale du produit — l'invariant central de [`openspec/project.md`](https://github.com/banux/Reconaut/blob/main/openspec/project.md) :
 
 > Le scanner refuse par construction de scanner une cible hors de la liste d'autorisation déclarée par l'opérateur. Pas de découverte du grand internet « à la Shodan ».
 
@@ -137,13 +137,13 @@ Pour les entrées `domain`, la résolution DNS qui transforme un domaine en IPs 
 1. Si les enregistrements DNS du domaine changent (par ex. l'opérateur change l'hébergeur), Reconaut suit automatiquement vers les nouvelles IPs au prochain scan.
 2. Le scope `domain:example.fr` couvre l'ensemble des IPs auxquelles le domaine résout au moment du scan, **mais ne couvre pas les IPs qui ne sont plus liées au domaine**.
 
-Le scanner DNS dédié (`scanner-dns_records`, cf. change [`add-dns-records-scanner`](../../openspec/changes/add-dns-records-scanner/)) capture les enregistrements A/AAAA/MX/NS/TXT/CAA/SOA/CNAME du domaine, ce qui te permet d'avoir une vue complète des IPs derrière le domaine sans devoir les ajouter manuellement comme entrées de scope.
+Le scanner DNS dédié (`scanner-dns_records`, cf. change [`add-dns-records-scanner`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-dns-records-scanner/)) capture les enregistrements A/AAAA/MX/NS/TXT/CAA/SOA/CNAME du domaine, ce qui te permet d'avoir une vue complète des IPs derrière le domaine sans devoir les ajouter manuellement comme entrées de scope.
 
 ## Bonnes pratiques
 
 1. **Commence petit**. Déclare une CIDR de test (`192.0.2.0/24` est officiellement réservé pour la doc) avant de pousser ton vrai périmètre.
 2. **Documente chaque entrée**. Le champ `description` n'est pas indexé mais il est précieux pour l'audit ultérieur (« pourquoi avais-je ajouté ça ? »).
-3. **Utilise des clés API scopées**. Une clé pour le bootstrap (`write:scopes`), une autre pour les agents IA en lecture (`read:scopes`, `read:hosts`, etc.). Cf. spec [`single-user-only`](../../openspec/changes/single-user-only/specs/mcp-server/spec.md) pour la matrice de scopes.
+3. **Utilise des clés API scopées**. Une clé pour le bootstrap (`write:scopes`), une autre pour les agents IA en lecture (`read:scopes`, `read:hosts`, etc.). Cf. spec [`single-user-only`](https://github.com/banux/Reconaut/blob/main/openspec/changes/single-user-only/specs/mcp-server/spec.md) pour la matrice de scopes.
 4. **Audit régulier**. Liste périodiquement les entrées actives :
    ```sh
    reconautctl scope list --json | jq '.scopes[] | select(.revoked_at == null)'
@@ -152,7 +152,7 @@ Le scanner DNS dédié (`scanner-dns_records`, cf. change [`add-dns-records-scan
 
 ## Liens
 
-- [`openspec/project.md`](../../openspec/project.md) — section *Positionnement* (Scope-driven).
-- [`init-reconaut-platform/specs/scanning/spec.md`](../../openspec/changes/init-reconaut-platform/specs/scanning/spec.md) — Requirement *Scope Declaration and Enforcement*.
+- [`openspec/project.md`](https://github.com/banux/Reconaut/blob/main/openspec/project.md) — section *Positionnement* (Scope-driven).
+- [`init-reconaut-platform/specs/scanning/spec.md`](https://github.com/banux/Reconaut/blob/main/openspec/changes/init-reconaut-platform/specs/scanning/spec.md) — Requirement *Scope Declaration and Enforcement*.
 - [`responsibility-model.md`](../operating/responsibility-model.md) — modèle de responsabilité opérateur ↔ Reconaut.
-- [`single-user-only/specs/mcp-server/spec.md`](../../openspec/changes/single-user-only/specs/mcp-server/spec.md) — matrice des scopes MCP.
+- [`single-user-only/specs/mcp-server/spec.md`](https://github.com/banux/Reconaut/blob/main/openspec/changes/single-user-only/specs/mcp-server/spec.md) — matrice des scopes MCP.

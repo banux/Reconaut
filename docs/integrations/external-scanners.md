@@ -6,7 +6,7 @@ L'intégration entrante passe par un seul outil MCP : **`ingest_scan_result`**.
 
 ## Principe
 
-L'outil externe doit produire un payload conforme au schéma JSON canonique [`packages/job-schema/scan_result_v1.json`](../../packages/job-schema/scan_result_v1.json) (`ScanResultV1`) — le même que les workers Go internes émettent. Aucun format alternatif n'est accepté en v1, c'est volontaire (discipline de schéma).
+L'outil externe doit produire un payload conforme au schéma JSON canonique [`packages/job-schema/scan_result_v1.json`](https://github.com/banux/Reconaut/blob/main/packages/job-schema/scan_result_v1.json) (`ScanResultV1`) — le même que les workers Go internes émettent. Aucun format alternatif n'est accepté en v1, c'est volontaire (discipline de schéma).
 
 Le payload est ensuite envoyé via MCP HTTP+SSE en invoquant l'outil `ingest_scan_result`, avec une clé API personnelle scopée au minimum `write:scans`.
 
@@ -18,7 +18,7 @@ Le payload est ensuite envoyé via MCP HTTP+SSE en invoquant l'outil `ingest_sca
 
 ### Cas particulier : DNS records depuis dig / cli maison
 
-Un opérateur qui exécute `dig` (ou un wrapper Python autour de `dnspython`) peut formater le résultat comme un `ScanResultV1` avec `scan_kind="dns_records"` et `findings` typés `dns_record`. C'est exactement le même format que celui émis par le binaire interne `scanner-dns_records` (cf. change [`add-dns-records-scanner`](../../openspec/changes/add-dns-records-scanner/proposal.md)) — la couche d'ingestion `Reconaut::ScanResultIngestor` ne distingue pas l'origine, seul le champ `source` change (`"internal"` vs `"dig"` / `"dnspython"` / etc.).
+Un opérateur qui exécute `dig` (ou un wrapper Python autour de `dnspython`) peut formater le résultat comme un `ScanResultV1` avec `scan_kind="dns_records"` et `findings` typés `dns_record`. C'est exactement le même format que celui émis par le binaire interne `scanner-dns_records` (cf. change [`add-dns-records-scanner`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-dns-records-scanner/proposal.md)) — la couche d'ingestion `Reconaut::ScanResultIngestor` ne distingue pas l'origine, seul le champ `source` change (`"internal"` vs `"dig"` / `"dnspython"` / etc.).
 
 ## Exemple : pousser un résultat nmap minimal
 
@@ -90,6 +90,6 @@ En v1, Reconaut ne livre **aucun** connecteur prêt-à-l'emploi. Chaque opérate
 
 ## Voir aussi
 
-- [`packages/job-schema/scan_result_v1.json`](../../packages/job-schema/scan_result_v1.json) — schéma canonique
-- [`openspec/changes/reposition-as-agent-knowledge-base/`](../../openspec/changes/reposition-as-agent-knowledge-base/) — change qui acte le repositionnement « base de connaissance pour agents »
-- [`openspec/changes/mcp-as-primary-entrypoint/`](../../openspec/changes/mcp-as-primary-entrypoint/) — change qui acte MCP comme canal canonique
+- [`packages/job-schema/scan_result_v1.json`](https://github.com/banux/Reconaut/blob/main/packages/job-schema/scan_result_v1.json) — schéma canonique
+- [`openspec/changes/reposition-as-agent-knowledge-base/`](https://github.com/banux/Reconaut/blob/main/openspec/changes/reposition-as-agent-knowledge-base/) — change qui acte le repositionnement « base de connaissance pour agents »
+- [`openspec/changes/mcp-as-primary-entrypoint/`](https://github.com/banux/Reconaut/blob/main/openspec/changes/mcp-as-primary-entrypoint/) — change qui acte MCP comme canal canonique

@@ -43,6 +43,9 @@ jobs:
       # Linter anti-stdio MCP. Cf. add-mcp-engine §4.1.
       - run: bash scripts/check_no_mcp_stdio.sh
       - run: bash scripts/check_no_mcp_stdio_test.sh
+      # Linter cohérence des liens dans docs/. Cf. add-doc-site §3.1.
+      - run: bash scripts/check_doc_links.sh
+      - run: bash scripts/check_doc_links_test.sh
 
   api-rspec:
     name: api-rspec

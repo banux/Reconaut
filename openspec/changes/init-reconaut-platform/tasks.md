@@ -229,7 +229,18 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Notes** : `docs/usage/scope.md` qui explique le modèle scope-driven, comment déclarer son scope, ce qui se passe quand une cible est hors scope.
   - **Test plan** : La page existe et est citée depuis l'UI au premier login.
 
-- [ ] **9.4 Site de doc public (Docusaurus ou MkDocs)** — référence API + référence outils MCP (HTTP+SSE) + runbooks de déploiement. *Reformulé par `drop-gdpr-framing` : pas de page DSAR (Reconaut ne stocke pas de PII ; la page `docs/operating/responsibility-model.md` couvre ce que l'opérateur doit comprendre).* **Différé à un change dédié `add-doc-site`** : choix d'outil, structure de navigation, theme, build CI, déploiement GitHub Pages — chantier qui mérite son propre cycle plan→implement.
+- [x] **9.4 Site de doc public (Docusaurus ou MkDocs)** — référence API + référence outils MCP (HTTP+SSE) + runbooks de déploiement. *Reformulé par `drop-gdpr-framing` : pas de page DSAR (Reconaut ne stocke pas de PII ; la page `docs/operating/responsibility-model.md` couvre ce que l'opérateur doit comprendre).*
+  - **Statut** : Livré par `add-doc-site` :
+    - **MkDocs Material** choisi (config simple, pas de Node, footprint Python build-only).
+    - `mkdocs.yml` racine + `docs/requirements-docs.txt` épinglé.
+    - **Référence MCP** générée par `scripts/gen_mcp_tools_reference.rb` à partir de `Mcp::ToolRegistry` (15 tools) — déterministe, idempotente, committed.
+    - **Référence REST** générée par `scripts/gen_rest_reference.rb` (9 routes en 4 familles : auth bootstrap / healthcheck / MCP tools / MCP exports) — committed.
+    - **Linter** `scripts/check_doc_links.sh` (+ test) wired in CI : refuse les liens relatifs cassés dans `docs/`.
+    - **Workflow** `.github/workflows/docs.yml` : régénère les pages auto, échoue si diff non commité, `mkdocs build --strict`, déploie sur `gh-pages` via `peaceiris/actions-gh-pages@v4`.
+    - **Runbook** : `docs/operating/doc-site-deployment.md` documente l'activation manuelle GitHub Pages (Settings → Pages → gh-pages) et la prévisualisation locale.
+    - **Pas d'analytics tiers** : `extra.analytics` absent du config Material ; vérifié par `grep` sur `site/` après build (0 match Mixpanel/Segment/GA/PostHog).
+    - **Strict mode** : `mkdocs build --strict` passe sans warning ; tous les liens `../../openspec/...` ont été réécrits en URLs GitHub absolues pour la cohérence du site rendu.
+  - Versioning multi-release (`mike`), i18n, search Algolia, PDF export, comments giscus : différés à des changes dédiés (cf. `add-doc-site` proposal).
 
 ---
 

@@ -27,7 +27,7 @@ Reconaut **ne stocke pas de PII** au sens du RGPD. Le périmètre des données s
 | API keys                     | `prefix` (8 chars), `token_hash` (SHA-256 du token, jamais le clair), `scopes` MCP | Non |
 | Embeddings (vecteurs sémantiques) | `host_id`, `content` (banner/services agrégés), `vector(384)`, `provider` (`local`/`ollama`/`mistral`/`openai-compatible`), `model`, `dim` | Non — métadonnée technique d'index ; aucun enrichissement nominatif |
 
-Le change [`drop-gdpr-framing`](../../openspec/changes/drop-gdpr-framing/proposal.md) acte que le projet ne fournit pas de framework RGPD dédié (tombstone hashée, registre des traitements, validation EU codée en dur). Les capacités utiles — audit, erase, résidence — restent, sous cadrage **opérationnel**.
+Le change [`drop-gdpr-framing`](https://github.com/banux/Reconaut/blob/main/openspec/changes/drop-gdpr-framing/proposal.md) acte que le projet ne fournit pas de framework RGPD dédié (tombstone hashée, registre des traitements, validation EU codée en dur). Les capacités utiles — audit, erase, résidence — restent, sous cadrage **opérationnel**.
 
 Si l'opérateur ingère **involontairement** des données personnelles (rare : un site web public qui retourne du contenu personnel dans son banner HTTP, par exemple), c'est à lui d'évaluer la conformité de sa pratique. Il dispose des outils suivants pour agir.
 
@@ -35,7 +35,7 @@ Si l'opérateur ingère **involontairement** des données personnelles (rare : u
 
 ### 1. Audit log append-only
 
-Cf. [`init §6.3`](../../openspec/changes/init-reconaut-platform/tasks.md). La table `audit_log` est protégée par TRIGGERs Postgres qui rejettent tout `UPDATE`/`DELETE` direct avec un code d'erreur explicite. Chaque action mutante côté serveur (mutation de scope, scan déclenché, erase, mutation de clé API) écrit une ligne avec :
+Cf. [`init §6.3`](https://github.com/banux/Reconaut/blob/main/openspec/changes/init-reconaut-platform/tasks.md). La table `audit_log` est protégée par TRIGGERs Postgres qui rejettent tout `UPDATE`/`DELETE` direct avec un code d'erreur explicite. Chaque action mutante côté serveur (mutation de scope, scan déclenché, erase, mutation de clé API) écrit une ligne avec :
 
 - `caller_id` — typiquement `key:<prefix>` de la clé API courante
 - `template_id` ou nom d'action
@@ -48,7 +48,7 @@ L'opérateur peut requêter `audit_log` directement en SQL, ou via les outils MC
 
 ### 2. Effacement par cible
 
-Cf. [`Reconaut::EraseTarget`](../../apps/api/app/lib/reconaut/erase_target.rb). Service transactionnel qui supprime, en une transaction Postgres :
+Cf. [`Reconaut::EraseTarget`](https://github.com/banux/Reconaut/blob/main/apps/api/app/lib/reconaut/erase_target.rb). Service transactionnel qui supprime, en une transaction Postgres :
 
 - Les lignes scalaires `hosts` (matching id UUID, fqdn, ou ip), avec cascade FK vers `services`.
 - Les lignes `scans` qui matchent target_value ou idempotency_key.
@@ -66,7 +66,7 @@ Ce n'est **pas** un workflow DSAR/RGPD. C'est un outil d'**hygiène opérationne
 
 ### 3. Étiquette de résidence des données
 
-Cf. [`Reconaut::Doctor#check_data_residency`](../../apps/api/app/lib/reconaut/doctor.rb). L'opérateur déclare un identifiant libre de résidence via la variable d'environnement :
+Cf. [`Reconaut::Doctor#check_data_residency`](https://github.com/banux/Reconaut/blob/main/apps/api/app/lib/reconaut/doctor.rb). L'opérateur déclare un identifiant libre de résidence via la variable d'environnement :
 
 ```sh
 RECONAUT_DATA_RESIDENCY="on-prem-rack-paris-1"
@@ -93,7 +93,7 @@ Quand l'opérateur active un fournisseur externe :
 
 ## Modèle de menace
 
-Le détail vit dans [`openspec/project.md`](../../openspec/project.md) section *Modèle de menace et limites de responsabilité*. Résumé :
+Le détail vit dans [`openspec/project.md`](https://github.com/banux/Reconaut/blob/main/openspec/project.md) section *Modèle de menace et limites de responsabilité*. Résumé :
 
 - **Pas de balayage du grand internet** — le scanner refuse en dur les cibles hors scope.
 - **Pas de scan offensif** — pas de PoC d'exploitation, pas de bruteforce d'authentification, pas de payload weaponisé. Les sondeurs (SSH, HTTP, etc.) capturent banners et fingerprints en lecture pure.
@@ -102,7 +102,7 @@ Le détail vit dans [`openspec/project.md`](../../openspec/project.md) section *
 
 ## Liens
 
-- [`drop-gdpr-framing`](../../openspec/changes/drop-gdpr-framing/proposal.md) — la décision et son raisonnement.
+- [`drop-gdpr-framing`](https://github.com/banux/Reconaut/blob/main/openspec/changes/drop-gdpr-framing/proposal.md) — la décision et son raisonnement.
 - [`audit-bootstrap.md`](../architecture/auth-bootstrap.md) — pourquoi `/auth/*` reste REST.
 - [`mcp-first.md`](../architecture/mcp-first.md) — MCP comme canal principal.
 - [`agent-knowledge-base.md`](../positioning/agent-knowledge-base.md) — vision produit.

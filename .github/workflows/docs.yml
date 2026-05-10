@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Workflow CI dédié au site de doc public.
+#
+# Cf. openspec/changes/add-doc-site/specs/open-source-governance/spec.md
+#   -> Requirement: Public Documentation Site
+#
+# Trigger : push sur `main` qui touche la doc, les scripts générateurs,
+# ou les sources d'auto-génération (Mcp::CoreTools, routes.rb).
+#
+# Étapes :
+#   1. Régénère les pages auto (mcp-tools.md, rest-routes.md).
+#   2. Échoue si le diff n'est pas vide (le contributeur a oublié
+#      de régénérer avant de commit).
+#   3. `mkdocs build --strict` (échoue sur tout warning : lien cassé,
+#      orphelin, anchor manquante).
+#   4. Déploie sur la branche `gh-pages` (consommée par GitHub Pages).
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "scripts/gen_*.rb"
+      - "apps/api/app/lib/mcp/**"
+      - "apps/api/config/routes.rb"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "scripts/gen_*.rb"
+      - "apps/api/app/lib/mcp/**"
+      - "apps/api/config/routes.rb"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    name: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.4
+          bundler-cache: true
+          working-directory: apps/api
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install MkDocs deps
+        run: pip install -r docs/requirements-docs.txt
+
+      - name: Regenerate MCP tools reference
+        run: bundle exec ruby ../../scripts/gen_mcp_tools_reference.rb
+        working-directory: apps/api
+        env:
+          RAILS_ENV: test
+
+      - name: Regenerate REST routes reference
+        run: ruby scripts/gen_rest_reference.rb
+
+      - name: Verify auto-generated pages are committed
+        run: |
+          if ! git diff --exit-code docs/reference/; then
+            echo "::error::Pages auto-générées out-of-sync. Lance:"
+            echo "  cd apps/api && bundle exec ruby ../../scripts/gen_mcp_tools_reference.rb"
+            echo "  ruby scripts/gen_rest_reference.rb"
+            echo "puis commite docs/reference/."
+            exit 1
+          fi
+
+      - name: Build doc site (strict)
+        run: mkdocs build --strict
+
+      - name: Deploy to gh-pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages

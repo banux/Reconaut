@@ -26,12 +26,12 @@ externe interroge l'etat via les outils MCP.
 | `service_fingerprint` | `apps/scanner/cmd/scanner-service_fingerprint/`  | `scan:service_fingerprint` | `ip`, `host`                |
 | `dns_records`         | `apps/scanner/cmd/scanner-dns_records/`          | `scan:dns_records`         | `domain`, `host`            |
 
-`dns_records` (cf. change [`add-dns-records-scanner`](../../openspec/changes/add-dns-records-scanner/proposal.md))
+`dns_records` (cf. change [`add-dns-records-scanner`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-dns-records-scanner/proposal.md))
 resout les enregistrements DNS publics (A, AAAA, MX, NS, TXT, CAA,
 SOA, CNAME) d'un domaine couvert par le scope. Pas d'AXFR. Resolveur
 configurable via `RECONAUT_DNS_RESOLVER`.
 
-`service_fingerprint` (cf. change [`add-ssh-probe`](../../openspec/changes/add-ssh-probe/proposal.md))
+`service_fingerprint` (cf. change [`add-ssh-probe`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-ssh-probe/proposal.md))
 expose le **premier sondeur applicatif livré** : SSH banner + host-key
 SHA-256 sur TCP/22. Le sondeur ne tente JAMAIS d'authentification (pas
 de password, pas de clé, pas de keyboard-interactive). Il capture la
