@@ -3,6 +3,7 @@
 
 require_relative "../../lib/mcp/tool_registry"
 require_relative "../../lib/mcp/agent_chat_streamer"
+require_relative "../../lib/mcp/agent_chat_heartbeat"
 
 # Controller HTTP qui expose les outils MCP. Le namespace de routes
 # `/mcp/tools/:tool_name` accepte un POST JSON avec les paramètres ;
@@ -30,18 +31,42 @@ module Mcp
 
     def invoke
       tool = Mcp::ToolRegistry.fetch(params[:tool_name])
-      audit("invoke", tool.name)
 
-      result = tool.call(
-        params:        invocation_params,
-        caller_id:     caller_id,
-        caller_scopes: effective_scopes
-      )
+      will_stream = streaming_requested? && tool.name == "agent_chat"
+      progressive_retriever = will_stream && progressive_retriever_for_agent_chat
+      # Pour les invocations streamées, l'audit est écrit à la FIN avec
+      # le champ `streaming` + `outcome` (cf. add-agent-chat-streaming §2.2).
+      # Pour le reste, on logge tout de suite l'invocation comme avant.
+      audit("invoke", tool.name) unless will_stream
 
-      if streaming_requested? && tool.name == "agent_chat"
-        stream_agent_chat!(result)
+      if will_stream && progressive_retriever
+        # Voie progressive : on bypasse le tool block pour ne pas
+        # consommer la latence d'un `retriever.call` synchrone avant
+        # le premier chunk. Les permissions et la validation des
+        # params sont vérifiées à part par `tool.call` ; on les
+        # rejoue ici via `tool.call` MAIS sur un retriever stub qui
+        # ne fait rien, juste pour passer les guards.
+        # Compromis pragmatique : on appelle tool.call quand même
+        # pour les checks, puis on streame via each_chunk depuis le
+        # retriever ; le résultat de tool.call est ignoré.
+        _ = tool.call(
+          params:        invocation_params,
+          caller_id:     caller_id,
+          caller_scopes: effective_scopes
+        )
+        stream_agent_chat_progressive!(progressive_retriever, invocation_params[:prompt].to_s)
       else
-        render status: :ok, json: { tool: tool.name, result: result }
+        result = tool.call(
+          params:        invocation_params,
+          caller_id:     caller_id,
+          caller_scopes: effective_scopes
+        )
+
+        if will_stream
+          stream_agent_chat!(result)
+        else
+          render status: :ok, json: { tool: tool.name, result: result }
+        end
       end
     rescue Mcp::UnknownToolError => e
       audit("unknown_tool", params[:tool_name])
@@ -121,17 +146,113 @@ module Mcp
         duration_ms:    result_hash[:duration_ms]
       )
 
-      Mcp::AgentChatStreamer.chunks_for(reconstructed).each do |chunk|
-        event = {
-          tool:    "agent_chat",
-          partial: chunk[:type] != "done",
-          result:  chunk
-        }
-        response.stream.write("event: tool_result\n")
-        response.stream.write("data: #{event.to_json}\n\n")
+      heartbeat_interval = Float(ENV.fetch("RECONAUT_AGENT_CHAT_HEARTBEAT_S", 15))
+      heartbeat = Mcp::AgentChatHeartbeat.start(
+        stream: response.stream,
+        interval_s: heartbeat_interval
+      )
+      outcome = :completed
+
+      begin
+        Mcp::AgentChatStreamer.chunks_for(reconstructed).each do |chunk|
+          if response.stream.closed?
+            outcome = :client_gone
+            break
+          end
+
+          event = {
+            tool:    "agent_chat",
+            partial: chunk[:type] != "done",
+            result:  chunk
+          }
+          begin
+            response.stream.write("event: tool_result\n")
+            response.stream.write("data: #{event.to_json}\n\n")
+          rescue IOError, Errno::EPIPE
+            outcome = :client_gone
+            Rails.logger.info("[agent_chat] client gone during stream")
+            break
+          end
+        end
+      ensure
+        Mcp::AgentChatHeartbeat.stop(heartbeat)
+        record_streaming_audit!(outcome)
+        response.stream.close
       end
-    ensure
-      response.stream.close
+    end
+
+    # progressive_retriever_for_agent_chat : retourne le retriever
+    # natif (Registry.default.hybrid_retriever) s'il implémente
+    # `each_chunk`, sinon nil. Cf. add-agent-chat-streaming §3.1.
+    def progressive_retriever_for_agent_chat
+      r = ::Reconaut::Registry.default.hybrid_retriever
+      return nil if r.nil?
+      return nil unless r.respond_to?(:each_chunk)
+
+      r
+    end
+
+    # Streaming progressif : appelle `retriever.each_chunk(prompt)` et
+    # écrit chaque chunk dès réception. Pour les retrievers qui yield
+    # avec des intervalles temporels, ça donne une progression
+    # observable côté client (vs le post-hoc chunking qui produit tout
+    # d'un coup à la fin).
+    def stream_agent_chat_progressive!(retriever, prompt)
+      response.headers["Content-Type"]      = "text/event-stream"
+      response.headers["Cache-Control"]     = "no-cache"
+      response.headers["X-Accel-Buffering"] = "no"
+
+      heartbeat_interval = Float(ENV.fetch("RECONAUT_AGENT_CHAT_HEARTBEAT_S", 15))
+      heartbeat = Mcp::AgentChatHeartbeat.start(
+        stream: response.stream, interval_s: heartbeat_interval
+      )
+      outcome = :completed
+
+      begin
+        retriever.each_chunk(prompt) do |chunk|
+          if response.stream.closed?
+            outcome = :client_gone
+            break
+          end
+
+          event = {
+            tool:    "agent_chat",
+            partial: chunk[:type] != "done",
+            result:  chunk
+          }
+          begin
+            response.stream.write("event: tool_result\n")
+            response.stream.write("data: #{event.to_json}\n\n")
+          rescue IOError, Errno::EPIPE
+            outcome = :client_gone
+            Rails.logger.info("[agent_chat] client gone during progressive stream")
+            break
+          end
+        end
+      ensure
+        Mcp::AgentChatHeartbeat.stop(heartbeat)
+        record_streaming_audit!(outcome)
+        response.stream.close
+      end
+    end
+
+    # Réécrit l'audit pour l'invocation streamée : ajoute
+    # `streaming: true` + `outcome` au params_normalized. Cohérent
+    # avec le reste du système, sans modifier le schéma audit_log.
+    # Cf. add-agent-chat-streaming §2.2.
+    def record_streaming_audit!(outcome)
+      audit_recorder = Reconaut::Registry.default.audit_recorder
+      return unless audit_recorder
+
+      audit_recorder.record(
+        status:            :success,
+        template_id:       "mcp:agent_chat",
+        params_normalized: { streaming: true, outcome: outcome.to_s },
+        caller_id:         caller_id,
+        duration_ms:       0,
+        nodes_touched:     0
+      )
+    rescue StandardError
     end
 
     def invocation_params

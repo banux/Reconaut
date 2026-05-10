@@ -59,7 +59,7 @@ Procédure type pour migrer un controller REST vers un outil MCP :
 
 - Avant : `Agent::ChatController#create` rendait un body JSON `{ rows, citations, warnings, retrieval_path, duration_ms }`.
 - Après : tool MCP `agent_chat` enregistré dans [`Mcp::CoreTools`](../../apps/api/app/lib/mcp/core_tools.rb) ; le handler appelle `retriever.call(prompt)` et renvoie le même Hash.
-- Streaming : le controller [`Mcp::ToolsController`](../../apps/api/app/controllers/mcp/tools_controller.rb) détecte `Accept: text/event-stream` et bascule sur [`Mcp::AgentChatStreamer`](../../apps/api/app/lib/mcp/agent_chat_streamer.rb) qui découpe la réponse en chunks `tool_result` partiels (cf. §1.2).
+- Streaming : le controller [`Mcp::ToolsController`](../../apps/api/app/controllers/mcp/tools_controller.rb) détecte `Accept: text/event-stream` et bascule sur [`Mcp::AgentChatStreamer`](../../apps/api/app/lib/mcp/agent_chat_streamer.rb) qui découpe la réponse en chunks `tool_result` partiels (cf. §1.2). Le change [`add-agent-chat-streaming`](../../openspec/changes/add-agent-chat-streaming/) ajoute heartbeat keep-alive (`event: ping`), cancellation propagation (audit `client_gone`), et émission progressive optionnelle via `each_chunk`. Format détaillé et bonnes pratiques SDK consommateurs : [`docs/operating/agent-chat-streaming.md`](../operating/agent-chat-streaming.md).
 - Le controller `Agent::ChatController` reste mais porte désormais l'annotation `# DEPRECATED ...`.
 
 ## Quand `remove-rest-wrappers` retire-t-il les wrappers ?

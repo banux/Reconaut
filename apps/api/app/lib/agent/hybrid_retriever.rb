@@ -36,6 +36,23 @@ module Agent
       @metrics           = metrics
     end
 
+    # each_chunk : variante progressive du retrieval. Yield chaque
+    # chunk (`{type: "start", ...}` puis `{type: "row", ...}`*
+    # puis `{type: "done", ...}`) au fur et à mesure de la production.
+    #
+    # Cf. openspec/changes/add-agent-chat-streaming/specs/mcp-server/spec.md
+    #   -> Requirement: Optional Progressive Row Emission
+    #
+    # L'implémentation par défaut est un wrapper post-hoc autour de
+    # `call(user_query)` puis `Mcp::AgentChatStreamer.chunks_for` —
+    # cohérent avec le comportement actuel mais expose le contrat. Les
+    # retrievers qui veulent un vrai streaming overrident cette
+    # méthode pour yield au fur et à mesure.
+    def each_chunk(user_query)
+      response = call(user_query)
+      ::Mcp::AgentChatStreamer.chunks_for(response).each { |chunk| yield chunk }
+    end
+
     def call(user_query)
       started = monotonic_ms
       warnings = []
