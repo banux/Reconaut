@@ -78,6 +78,34 @@ type SSHProbeResult struct {
 	Outcome       string `json:"outcome"`
 }
 
+// HTTPProber est l'interface invoquée pour les jobs
+// scan_kind="http_banner". Le binaire scanner-http_banner injecte
+// une implémentation backée par internal/httpprobe.
+//
+// Cf. openspec/changes/add-http-probe/tasks.md §2.1.
+type HTTPProber interface {
+	Probe(ctx context.Context, target string, port int, scheme string) (HTTPProbeResult, error)
+}
+
+// HTTPProbeResult est le format minimal qu'un HTTPProber retourne au
+// handler. Mappable 1:1 avec httpprobe.Result sans coupler ce package
+// à httpprobe.
+type HTTPProbeResult struct {
+	Scheme        string            `json:"scheme"`
+	Status        int               `json:"status"`
+	Headers       map[string]string `json:"headers"`
+	Server        string            `json:"server"`
+	BodyExcerpt   string            `json:"body_excerpt"`
+	BodyBytes     int               `json:"body_bytes"`
+	ALPN          []string          `json:"alpn"`
+	TLSCertSHA256 string            `json:"tls_cert_sha256"`
+	TLSSANs       []string          `json:"tls_sans"`
+	TLSNotAfter   string            `json:"tls_not_after"`
+	DurationMs    int               `json:"duration_ms"`
+	BytesReceived int               `json:"bytes_received"`
+	Outcome       string            `json:"outcome"`
+}
+
 // ScopeChecker est la garde de défense-en-profondeur invoquée AVANT
 // chaque sonde : si la cible n'est pas couverte par une entrée de
 // scope active, le handler refuse de probe — aucun paquet réseau
@@ -96,6 +124,7 @@ type ScopeChecker interface {
 type Options struct {
 	DNSProber    DNSProber
 	SSHProber    SSHProber
+	HTTPProber   HTTPProber
 	ScopeChecker ScopeChecker
 	Clock        func() time.Time
 }
@@ -152,6 +181,11 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 
 		if scanKind == "service_fingerprint" && shouldProbeSSH(job.Params) {
 			return handleSSHProbe(ctx, store, opts.SSHProber, clock, idemKey, scanKind, targetKind, targetValue, sshPort(job.Params))
+		}
+
+		if scanKind == "http_banner" {
+			port, scheme := httpPortScheme(job.Params)
+			return handleHTTPProbe(ctx, store, opts.HTTPProber, clock, idemKey, scanKind, targetKind, targetValue, port, scheme)
 		}
 
 		// Placeholder no-op : la vraie sonde sera livrée par les
@@ -417,6 +451,104 @@ func handleSSHProbe(ctx context.Context, store results.Store, prober SSHProber,
 	_, err = store.Insert(ctx, result)
 	if err != nil {
 		return fmt.Errorf("scan_handler: persist ssh result: %w", err)
+	}
+	return nil
+}
+
+// httpPortScheme : choisit le couple (port, scheme) pour un job
+// http_banner. Heuristique :
+//   - findings indique TLS sur le port → scheme=https
+//   - options.protocols contient "https" → scheme=https
+//   - port 443 par défaut https, port < 443 défaut http
+//
+// Cf. add-http-probe §2.1.
+func httpPortScheme(params map[string]any) (int, string) {
+	port, hasPort := portFromFindings(params, "")
+	if !hasPort {
+		port = 80
+	}
+
+	scheme := "http"
+	if hasTLSInFindings(params, port) {
+		scheme = "https"
+	}
+	if hasProtocolInOptions(params, "https") {
+		scheme = "https"
+	}
+	if port == 443 {
+		scheme = "https"
+	}
+	return port, scheme
+}
+
+// hasTLSInFindings : un finding {port: P, tls: true} signale que la
+// cible parle TLS sur ce port (information typiquement remontée par
+// scanner-tls_capture en amont).
+func hasTLSInFindings(params map[string]any, wantPort int) bool {
+	findings, ok := params["findings"].([]any)
+	if !ok {
+		return false
+	}
+	for _, f := range findings {
+		fmap, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		port, _ := numberAsInt(fmap["port"])
+		if port != wantPort {
+			continue
+		}
+		if tls, ok := fmap["tls"].(bool); ok && tls {
+			return true
+		}
+		if proto, ok := fmap["protocol"].(string); ok && proto == "https" {
+			return true
+		}
+	}
+	return false
+}
+
+// handleHTTPProbe applique la sonde HTTP et persiste un Result dont le
+// champ Status sérialise en JSON le HTTPProbeResult.
+func handleHTTPProbe(ctx context.Context, store results.Store, prober HTTPProber,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string,
+	port int, scheme string) error {
+
+	if prober == nil {
+		// Worker démarré sans HTTPProber : on persiste un résultat
+		// "no-op" plutôt que de refuser.
+		result := results.Result{
+			IdempotencyKey: idemKey,
+			ScanKind:       scanKind,
+			TargetKind:     targetKind,
+			TargetValue:    targetValue,
+			Status:         "skipped (no HTTPProber wired)",
+			ObservedAt:     clock().UTC(),
+		}
+		_, err := store.Insert(ctx, result)
+		return err
+	}
+
+	probeRes, err := prober.Probe(ctx, targetValue, port, scheme)
+	if err != nil {
+		return fmt.Errorf("scan_handler: http probe: %w", err)
+	}
+
+	payload, err := json.Marshal(probeRes)
+	if err != nil {
+		return fmt.Errorf("scan_handler: marshal http probe result: %w", err)
+	}
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         string(payload),
+		ObservedAt:     clock().UTC(),
+	}
+	_, err = store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist http result: %w", err)
 	}
 	return nil
 }

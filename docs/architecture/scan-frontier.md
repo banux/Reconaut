@@ -38,8 +38,30 @@ de password, pas de clé, pas de keyboard-interactive). Il capture la
 host-key via `HostKeyCallback` puis interrompt le handshake AVANT toute
 phase userauth ; un linter CI (`scripts/check_ssh_probe_no_auth.sh`)
 garantit l'invariant. Timeout configurable via
-`RECONAUT_SSH_PROBE_TIMEOUT` (défaut 5 s). Les sondeurs HTTP, RDP,
-MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
+`RECONAUT_SSH_PROBE_TIMEOUT` (défaut 5 s).
+
+`http_banner` (cf. change [`add-http-probe`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-http-probe/proposal.md))
+expose le **deuxième sondeur applicatif livré** : HTTP et HTTPS sur
+ports configurables. Le sondeur capture :
+
+- `status`, `headers`, token `Server`, extrait HTML plafonné (32 KiB
+  par défaut, max dur 1 MiB) ;
+- en HTTPS : certificat TLS feuille (DER + SHA-256), SANs, `NotAfter`,
+  négociation ALPN (`h2`, `http/1.1`).
+
+Contraintes du sondeur (vérifiées statiquement par
+`scripts/check_http_probe_no_offensive.sh`) : `GET` / `HEAD`
+uniquement, pas d'`Authorization` header fabriqué, pas de redirect
+suivi (on capture la réponse 30x telle quelle), pas de path traversal,
+pas de payload weaponisé. TLS `InsecureSkipVerify=true` pour capturer
+le cert même invalide / expiré / self-signed ; la validation est faite
+a posteriori par la couche d'analyse Rails. Variables d'env :
+`RECONAUT_HTTP_PROBE_TIMEOUT` (défaut 5 s),
+`RECONAUT_HTTP_PROBE_MAX_BODY_KB` (défaut 32),
+`RECONAUT_HTTP_PROBE_USER_AGENT` (défaut `Reconaut/<version> (+...)`).
+
+Les sondeurs RDP, MQTT, CoAP, Modbus seront ajoutés par des changes
+dédiés.
 
 ## Principes intangibles
 
