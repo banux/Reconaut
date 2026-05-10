@@ -25,6 +25,7 @@ Reconaut **ne stocke pas de PII** au sens du RGPD. Le périmètre des données s
 | Audit log                    | `caller_id` (`key:<prefix>` de la clé API), `action`        | Non |
 | User opérateur               | `email` (matricule local, ex. `operator@local`), `password_hash` Argon2id | Non — identifiant local, pas une adresse réelle obligatoire |
 | API keys                     | `prefix` (8 chars), `token_hash` (SHA-256 du token, jamais le clair), `scopes` MCP | Non |
+| Embeddings (vecteurs sémantiques) | `host_id`, `content` (banner/services agrégés), `vector(384)`, `provider` (`local`/`ollama`/`mistral`/`openai-compatible`), `model`, `dim` | Non — métadonnée technique d'index ; aucun enrichissement nominatif |
 
 Le change [`drop-gdpr-framing`](../../openspec/changes/drop-gdpr-framing/proposal.md) acte que le projet ne fournit pas de framework RGPD dédié (tombstone hashée, registre des traitements, validation EU codée en dur). Les capacités utiles — audit, erase, résidence — restent, sous cadrage **opérationnel**.
 

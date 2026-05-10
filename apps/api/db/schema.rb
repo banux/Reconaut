@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_09_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_10_000001) do
   create_schema "reconaut"
 
   # These are extensions that must be enabled in order to support this database
@@ -125,6 +125,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_09_120001) do
     t.index ["template_id"], name: "idx_audit_log_template_id", where: "(template_id IS NOT NULL)"
   end
 
+# Could not dump table "embeddings" because of following StandardError
+#   Unknown type 'public.vector(384)' for column 'vector'
+
+
   create_table "reconaut.hosts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", default: -> { "now()" }, null: false
     t.datetime "first_seen_at", precision: nil, default: -> { "now()" }, null: false
@@ -195,6 +199,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_09_120001) do
   end
 
   add_foreign_key "reconaut.api_keys", "reconaut.users", on_delete: :cascade
+  add_foreign_key "reconaut.embeddings", "reconaut.hosts", on_delete: :cascade
   add_foreign_key "reconaut.services", "reconaut.hosts", name: "services_host_id_fkey", on_delete: :cascade
 
 end

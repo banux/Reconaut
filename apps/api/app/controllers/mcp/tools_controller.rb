@@ -55,6 +55,24 @@ module Mcp
     rescue Mcp::ParamTypeError, Mcp::ParamOutOfRangeError => e
       audit("param_invalid", params[:tool_name])
       render status: :bad_request, json: { error: "param_invalid", message: e.message }
+    rescue Reconaut::Embedder::UnavailableError,
+           Reconaut::Embedder::TimeoutError,
+           Reconaut::Embedder::CircuitOpenError => e
+      # Cf. openspec/changes/add-embedder-pluggable/specs/agent-interface/spec.md
+      #   -> Requirement: Embedder Resilience (mapping 503).
+      audit("invoke", params[:tool_name])
+      provider_name = embedder_provider_for(params[:tool_name])
+      reason = case e
+               when Reconaut::Embedder::TimeoutError    then "timeout"
+               when Reconaut::Embedder::CircuitOpenError then "circuit-open"
+               else "backend-unavailable"
+               end
+      render status: :service_unavailable, json: {
+        error:    "embedding_provider_unavailable",
+        provider: provider_name,
+        reason:   reason,
+        message:  e.message
+      }
     end
 
     def list
@@ -119,6 +137,16 @@ module Mcp
     def invocation_params
       raw = params.to_unsafe_h.except("controller", "action", "tool_name", "format")
       raw
+    end
+
+    # Best-effort lookup du provider embedder pour la 503 mapping.
+    # Si l'embedder n'est pas câblé dans le Registry, retourne "unknown".
+    def embedder_provider_for(_tool_name)
+      reg = ::Reconaut::Registry.default
+      embedder = reg.respond_to?(:embedder) ? reg.embedder : nil
+      embedder&.provider || "unknown"
+    rescue StandardError
+      "unknown"
     end
 
     def audit(status_kind, tool_name)

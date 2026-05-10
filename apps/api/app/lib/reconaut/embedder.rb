@@ -20,6 +20,13 @@ module Reconaut
   module Embedder
     class MisconfiguredError < StandardError; end
     class UnavailableError < StandardError; end
+    # Le wrapper de résilience (cf. Reconaut::Embedder::Resilient) lève
+    # ces erreurs typées pour distinguer (a) un timeout de l'appel,
+    # (b) un circuit breaker ouvert, (c) un backend cassé. Sémantiques
+    # différentes : une 503 mappée par Agent::ChatController peut
+    # remonter `reason` plus précis.
+    class TimeoutError    < StandardError; end
+    class CircuitOpenError < StandardError; end
 
     # --- Interface implicite : toute classe qui a `embed(texts:)` est
     # acceptable. On documente le contrat ici a defaut de Sorbet.
@@ -35,6 +42,11 @@ module Reconaut
 
     # Construit l'instance pour une config donnee. Soulagement par env
     # par defaut, mais on peut passer un hash explicite (utile en tests).
+    #
+    # Les providers réseau (`ollama`, `mistral`, `openai-compatible`)
+    # sont enveloppés automatiquement dans `Resilient` (timeout +
+    # circuit breaker). `local` reste exempt — in-process, pas de
+    # réseau, aucun bénéfice à wrapper.
     def build(env: ENV)
       provider = env.fetch("RECONAUT_EMBEDDER_PROVIDER", "local").to_s.downcase
       unless PROVIDERS.include?(provider)
@@ -42,26 +54,38 @@ module Reconaut
               "embedder-misconfigured: unknown provider #{provider.inspect}, must be one of #{PROVIDERS.join(",")}"
       end
 
-      case provider
-      when "local"
-        Local.new(dim: Integer(env.fetch("RECONAUT_EMBEDDER_LOCAL_DIM", DEFAULT_LOCAL_DIM)))
-      when "ollama"
-        url   = env["RECONAUT_EMBEDDER_OLLAMA_URL"]
-        model = env["RECONAUT_EMBEDDER_OLLAMA_MODEL"]
-        require_env!(provider, url: url, model: model)
-        Ollama.new(url: url, model: model)
-      when "mistral"
-        api_key = env["RECONAUT_EMBEDDER_MISTRAL_API_KEY"]
-        model   = env.fetch("RECONAUT_EMBEDDER_MISTRAL_MODEL", "mistral-embed")
-        require_env!(provider, api_key: api_key)
-        Mistral.new(api_key: api_key, model: model)
-      when "openai-compatible"
-        base_url = env["RECONAUT_EMBEDDER_OPENAI_BASE_URL"]
-        api_key  = env["RECONAUT_EMBEDDER_OPENAI_API_KEY"]
-        model    = env["RECONAUT_EMBEDDER_OPENAI_MODEL"]
-        require_env!(provider, base_url: base_url, api_key: api_key, model: model)
-        OpenAICompatible.new(base_url: base_url, api_key: api_key, model: model)
-      end
+      raw = case provider
+            when "local"
+              Local.new(dim: Integer(env.fetch("RECONAUT_EMBEDDER_LOCAL_DIM", DEFAULT_LOCAL_DIM)))
+            when "ollama"
+              url   = env["RECONAUT_EMBEDDER_OLLAMA_URL"]
+              model = env["RECONAUT_EMBEDDER_OLLAMA_MODEL"]
+              require_env!(provider, url: url, model: model)
+              Ollama.new(url: url, model: model)
+            when "mistral"
+              api_key = env["RECONAUT_EMBEDDER_MISTRAL_API_KEY"]
+              model   = env.fetch("RECONAUT_EMBEDDER_MISTRAL_MODEL", "mistral-embed")
+              require_env!(provider, api_key: api_key)
+              Mistral.new(api_key: api_key, model: model)
+            when "openai-compatible"
+              base_url = env["RECONAUT_EMBEDDER_OPENAI_BASE_URL"]
+              api_key  = env["RECONAUT_EMBEDDER_OPENAI_API_KEY"]
+              model    = env["RECONAUT_EMBEDDER_OPENAI_MODEL"]
+              require_env!(provider, base_url: base_url, api_key: api_key, model: model)
+              OpenAICompatible.new(base_url: base_url, api_key: api_key, model: model)
+            end
+
+      provider == "local" ? raw : wrap_resilient(raw, env)
+    end
+
+    def wrap_resilient(inner, env)
+      Resilient.new(
+        inner,
+        timeout_s:        Float(env.fetch("RECONAUT_EMBEDDER_TIMEOUT_S", 2.5)),
+        breaker_failures: Integer(env.fetch("RECONAUT_EMBEDDER_BREAKER_FAILURES", 5)),
+        breaker_window_s: Integer(env.fetch("RECONAUT_EMBEDDER_BREAKER_WINDOW_S", 30)),
+        breaker_open_s:   Integer(env.fetch("RECONAUT_EMBEDDER_BREAKER_OPEN_S", 60))
+      )
     end
 
     def require_env!(provider, **fields)
@@ -78,3 +102,5 @@ require_relative "embedder/local"
 require_relative "embedder/ollama"
 require_relative "embedder/mistral"
 require_relative "embedder/openai_compatible"
+require_relative "embedder/breaker"
+require_relative "embedder/resilient"

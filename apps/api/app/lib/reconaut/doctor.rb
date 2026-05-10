@@ -90,6 +90,7 @@ module Reconaut
       checks << check_ingestion_endpoint(probes, ctx)
       checks << check_auth_storage(probes, ctx)
       checks << check_mcp_tls_posture(probes, ctx)
+      checks << check_embedder_health(probes, ctx)
 
       # ok = aucun :fail. Les statuts :info (provider externe configure)
       # et :unknown (lag pas encore mesure, normal au boot) sont
@@ -265,6 +266,31 @@ module Reconaut
         status:  :info,
         details: { backend: backend, users: users_count, api_keys_active: keys_active }
       )
+    end
+
+    # embedder_health : provider actif + dim + état du circuit breaker.
+    # Cf. add-embedder-pluggable §5.1.
+    def check_embedder_health(_probes, _ctx)
+      embedder = ::Reconaut::Registry.default.embedder
+      details = if embedder.respond_to?(:stats)
+                  s = embedder.stats
+                  {
+                    provider:       s[:provider],
+                    dim:            s[:dim],
+                    circuit_state:  s[:circuit_state],
+                    failures_total: s[:failures_total]
+                  }
+                else
+                  {
+                    provider:       embedder.provider,
+                    dim:            embedder.dim,
+                    circuit_state:  :closed, # Local n'est pas wrappé
+                    failures_total: 0
+                  }
+                end
+      Check.new(name: "embedder_health", status: :info, details: details)
+    rescue StandardError => e
+      Check.new(name: "embedder_health", status: :unknown, details: e.message[0, 80])
     end
 
     # mcp_tls_posture : valeur effective de RECONAUT_MCP_TLS_REQUIRED.

@@ -20,7 +20,7 @@ module Reconaut
   class Registry
     attr_accessor :hybrid_retriever, :scope_storage, :audit_recorder, :job_bus,
                   :user_store, :api_key_store, :password_hasher, :heartbeat_store,
-                  :scan_store
+                  :scan_store, :embedder
 
     def initialize
       @audit_recorder   = ::Agent::AuditRecorder::InMemoryRecorder.new
@@ -34,6 +34,10 @@ module Reconaut
       # qui boote la registry. Les specs auth qui veulent le hash reel
       # remplacent password_hasher par PasswordHasher::Argon2id.new.
       @password_hasher  = ::Reconaut::Auth::PasswordHasher::Plain.new
+      # Embedder par défaut : Local (zéro réseau). Les specs qui
+      # veulent simuler une panne externe injectent un fake via
+      # `Reconaut::Registry.default.embedder = ...`.
+      @embedder = wire_embedder
     end
 
     # Choisit le backend de stockage auth selon l'état de la connexion
@@ -51,6 +55,16 @@ module Reconaut
         [::Reconaut::Auth::Storage::InMemoryUsers.new,
          ::Reconaut::Auth::Storage::InMemoryApiKeys.new]
       end
+    end
+
+    # wire_embedder construit un embedder à partir de l'env. Si
+    # MisconfiguredError, retombe sur Local en environnement test pour
+    # ne pas casser la suite ; en prod l'initializer
+    # `embedder_validation.rb` aura déjà fait planter le boot.
+    def wire_embedder
+      ::Reconaut::Embedder.build(env: ENV)
+    rescue ::Reconaut::Embedder::MisconfiguredError
+      ::Reconaut::Embedder::Local.new(dim: ::Reconaut::Embedder::DEFAULT_LOCAL_DIM)
     end
 
     def active_record_auth_ready?

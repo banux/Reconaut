@@ -27,14 +27,15 @@ RSpec.describe Reconaut::Embedder, ".build" do
     }.to raise_error(Reconaut::Embedder::MisconfiguredError, /url/)
   end
 
-  it "ollama avec URL et MODEL ok" do
+  it "ollama avec URL et MODEL ok (auto-wrappé Resilient cf. add-embedder-pluggable §2.4)" do
     embedder = described_class.build(env: {
       "RECONAUT_EMBEDDER_PROVIDER" => "ollama",
       "RECONAUT_EMBEDDER_OLLAMA_URL" => "http://localhost:11434",
       "RECONAUT_EMBEDDER_OLLAMA_MODEL" => "nomic-embed"
     })
-    expect(embedder).to be_a(Reconaut::Embedder::Ollama)
-    expect(embedder.model).to eq("nomic-embed")
+    expect(embedder).to be_a(Reconaut::Embedder::Resilient)
+    expect(embedder.inner).to be_a(Reconaut::Embedder::Ollama)
+    expect(embedder.inner.model).to eq("nomic-embed")
   end
 
   it "mistral sans cle -> embedder-misconfigured" do
@@ -43,12 +44,13 @@ RSpec.describe Reconaut::Embedder, ".build" do
     }.to raise_error(Reconaut::Embedder::MisconfiguredError, /api_key/)
   end
 
-  it "mistral avec cle ok" do
+  it "mistral avec cle ok (auto-wrappé Resilient)" do
     embedder = described_class.build(env: {
       "RECONAUT_EMBEDDER_PROVIDER" => "mistral",
       "RECONAUT_EMBEDDER_MISTRAL_API_KEY" => "k"
     })
-    expect(embedder).to be_a(Reconaut::Embedder::Mistral)
+    expect(embedder).to be_a(Reconaut::Embedder::Resilient)
+    expect(embedder.inner).to be_a(Reconaut::Embedder::Mistral)
   end
 
   it "openai-compatible sans BASE_URL -> embedder-misconfigured" do
@@ -61,14 +63,21 @@ RSpec.describe Reconaut::Embedder, ".build" do
     }.to raise_error(Reconaut::Embedder::MisconfiguredError, /base_url/)
   end
 
-  it "openai-compatible avec BASE_URL + API_KEY + MODEL ok" do
+  it "openai-compatible avec BASE_URL + API_KEY + MODEL ok (auto-wrappé Resilient)" do
     embedder = described_class.build(env: {
       "RECONAUT_EMBEDDER_PROVIDER" => "openai-compatible",
       "RECONAUT_EMBEDDER_OPENAI_BASE_URL" => "http://lm:1234",
       "RECONAUT_EMBEDDER_OPENAI_API_KEY" => "k",
       "RECONAUT_EMBEDDER_OPENAI_MODEL" => "nomic"
     })
-    expect(embedder).to be_a(Reconaut::Embedder::OpenAICompatible)
+    expect(embedder).to be_a(Reconaut::Embedder::Resilient)
+    expect(embedder.inner).to be_a(Reconaut::Embedder::OpenAICompatible)
+  end
+
+  it "local n'est PAS wrappé (zéro réseau, déjà rapide)" do
+    embedder = described_class.build(env: { "RECONAUT_EMBEDDER_PROVIDER" => "local" })
+    expect(embedder).to be_a(Reconaut::Embedder::Local)
+    expect(embedder).not_to be_a(Reconaut::Embedder::Resilient)
   end
 
   it "provider inconnu -> embedder-misconfigured" do
