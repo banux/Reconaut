@@ -83,3 +83,4 @@ Une fois ces critères atteints, le change `remove-rest-wrappers` :
 - [Spec architecture](../../openspec/changes/mcp-as-primary-entrypoint/specs/architecture/spec.md) — Requirement *MCP HTTP+SSE as Primary Entrypoint*.
 - [auth-bootstrap.md](./auth-bootstrap.md) — pourquoi `/auth/*` reste REST.
 - [scan-frontier.md](./scan-frontier.md) — frontière de scan, complémentaire au modèle d'auth.
+- [mcp-exports.md](../operating/mcp-exports.md) — tool `export_report` (json/csv/stix2 + URL signée HMAC + one-shot download).

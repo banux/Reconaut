@@ -40,6 +40,9 @@ jobs:
       # Linter no-billing-no-feature-gate. Cf. init-reconaut-platform §8.4.
       - run: bash scripts/check_no_billing.sh
       - run: bash scripts/check_no_billing_test.sh
+      # Linter anti-stdio MCP. Cf. add-mcp-engine §4.1.
+      - run: bash scripts/check_no_mcp_stdio.sh
+      - run: bash scripts/check_no_mcp_stdio_test.sh
 
   api-rspec:
     name: api-rspec

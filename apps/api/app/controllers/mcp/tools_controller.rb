@@ -256,8 +256,30 @@ module Mcp
     end
 
     def invocation_params
+      # On exclut UNIQUEMENT les clefs de routing Rails. NB : on
+      # garde `format` qui peut être un paramètre métier valide
+      # (cf. tool `export_report` qui accepte `format: json|csv|stix2`).
+      # Si un tool a besoin d'un `format` distinct du Rails routing,
+      # le body JSON prend le pas.
+      body_params = parsed_json_body
       raw = params.to_unsafe_h.except("controller", "action", "tool_name", "format")
+      # Restaure le `format` provenant du body JSON s'il existe.
+      raw["format"] = body_params["format"] if body_params.key?("format")
       raw
+    end
+
+    # Parse le body JSON brut (indépendant de la merge Rails). Permet
+    # de récupérer un `format` du body même quand Rails l'a interprété
+    # comme un format de routing.
+    def parsed_json_body
+      return {} unless request.content_type.to_s.include?("application/json")
+
+      raw = request.raw_post
+      return {} if raw.empty?
+
+      JSON.parse(raw)
+    rescue JSON::ParserError
+      {}
     end
 
     # Best-effort lookup du provider embedder pour la 503 mapping.

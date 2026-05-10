@@ -22,5 +22,9 @@ Rails.application.routes.draw do
   scope "/mcp" do
     get  "/tools",            to: "mcp/tools#list"
     post "/tools/:tool_name", to: "mcp/tools#invoke"
+    # Téléchargement one-shot d'un export généré par le tool MCP
+    # `export_report`. Reste sous `/mcp/*` pour passer l'allowlist
+    # REST (cf. add-mcp-engine).
+    get  "/exports/:id",      to: "mcp/exports#download"
   end
 end

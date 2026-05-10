@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 # SPDX-License-Identifier: AGPL-3.0-only
 
+require "uri"
+require "openssl"
 require_relative "tool_registry"
 require_relative "../agent/hybrid_retriever"
 require_relative "../reconaut/scan_enqueuer"
@@ -8,6 +10,7 @@ require_relative "../reconaut/doctor"
 require_relative "../reconaut/heartbeats"
 require_relative "../reconaut/scans"
 require_relative "../reconaut/ingest_scan_result"
+require_relative "../reconaut/exporter"
 require_relative "../../use_cases/scopes/operations"
 
 module Mcp
@@ -316,7 +319,87 @@ module Mcp
         end
       end
 
+      register_export_report!
+
       ToolRegistry
+    end
+
+    # export_report : génère un export json/csv/stix2, retourne une URL
+    # de téléchargement signée HMAC-SHA256 (one-shot, TTL 1h).
+    #
+    # Cf. openspec/changes/add-mcp-engine/specs/mcp-server/spec.md
+    #   -> Requirement: MCP Tool `export_report`
+    def register_export_report!
+      ToolRegistry.register(
+        name:   "export_report",
+        scopes: [:"read:reports"],
+        params_schema: {
+          filter: { type: :hash },
+          format: { type: :string, min_length: 3, max_length: 16 }
+        }
+      ) do |params:, caller_id:|
+        filter = params[:filter] || {}
+        format = params[:format].to_s
+        kind   = (filter[:kind] || filter["kind"]).to_s
+        limit  = (filter[:limit] || filter["limit"] || ::Reconaut::Exporter::DEFAULT_LIMIT).to_i
+
+        unless ::Reconaut::Exporter::ALLOWED_KINDS.include?(kind)
+          next { ok: false, error: "invalid_param", message: "filter.kind must be one of #{::Reconaut::Exporter::ALLOWED_KINDS.join(", ")}" }
+        end
+        unless ::Reconaut::Exporter::ALLOWED_FORMATS.include?(format)
+          next { ok: false, error: "invalid_param", message: "format must be one of #{::Reconaut::Exporter::ALLOWED_FORMATS.join(", ")}" }
+        end
+
+        dest_dir   = export_dir
+        ttl_s      = export_ttl_s
+        ::Reconaut::Exporter.purge_older_than!(dir: dest_dir, older_than: 24 * 3600)
+
+        begin
+          result = ::Reconaut::Exporter.export(
+            kind: kind, format: format, dest_dir: dest_dir, limit: limit
+          )
+        rescue ::Reconaut::Exporter::InvalidParamError => e
+          next { ok: false, error: "invalid_param", message: e.message }
+        rescue ::ActiveRecord::ActiveRecordError, PG::Error => e
+          # DB indisponible / table absente — retombe gracieusement.
+          next { ok: false, error: "data_unavailable", message: e.class.name }
+        end
+
+        uuid       = File.basename(result.path, ".*")
+        expires_at = (Time.now + ttl_s).utc.iso8601
+        token      = export_token_for(uuid, expires_at)
+
+        # download_url embarque les deux paramètres signés ; le client
+        # fait un GET direct sans avoir à reconstruire l'URL.
+        query = ::URI.encode_www_form(token: token, expires_at: expires_at)
+
+        {
+          download_url:  "/mcp/exports/#{uuid}?#{query}",
+          token:         token,
+          expires_at:    expires_at,
+          format:        result.format,
+          record_count:  result.record_count,
+          kind:          result.kind
+        }
+      end
+    end
+
+    # Token HMAC-SHA256 calculé sur "<uuid>|<expires_at>" avec
+    # `Rails.application.secret_key_base`. Vérifié au temps constant
+    # via `Rack::Utils.secure_compare` côté ExportsController.
+    def export_token_for(uuid, expires_at_iso)
+      secret = ::Rails.application.secret_key_base
+      ::OpenSSL::HMAC.hexdigest("SHA256", secret, "#{uuid}|#{expires_at_iso}")
+    end
+
+    def export_dir
+      path = ENV["RECONAUT_EXPORT_DIR"]
+      path = ::Rails.root.join("tmp/exports").to_s if path.nil? || path.empty?
+      path
+    end
+
+    def export_ttl_s
+      Integer(ENV.fetch("RECONAUT_EXPORT_TTL_S", 3600))
     end
   end
 end

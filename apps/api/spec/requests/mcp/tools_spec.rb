@@ -56,7 +56,8 @@ RSpec.describe "MCP tools endpoint", type: :request do
         "list_scopes", "add_scope", "revoke_scope",
         "request_scan", "list_scans", "get_scan_status",
         "agent_chat",
-        "ingest_scan_result", "system_doctor"
+        "ingest_scan_result", "system_doctor",
+        "export_report"
       )
 
       search = body[:tools].find { |t| t[:name] == "search_hosts" }
