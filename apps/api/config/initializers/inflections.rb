@@ -15,3 +15,10 @@
 # ActiveSupport::Inflector.inflections(:en) do |inflect|
 #   inflect.acronym "RESTful"
 # end
+
+# Zeitwerk déduit `OpenaiCompatible` depuis `openai_compatible.rb` ;
+# l'acronyme aligne l'inflecteur sur la convention utilisée par le code
+# (`Reconaut::Embedder::OpenAICompatible`).
+ActiveSupport::Inflector.inflections(:en) do |inflect|
+  inflect.acronym "OpenAI"
+end
