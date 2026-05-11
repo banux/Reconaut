@@ -98,4 +98,41 @@ RSpec.describe Host, type: :model do
       expect { h.destroy }.to change { Service.count }.by(-1)
     end
   end
+
+  describe "embedding indexing hook (add-embedding-pipeline)" do
+    around do |ex|
+      original = ActiveJob::Base.queue_adapter
+      ActiveJob::Base.queue_adapter = :test
+      Embedding.delete_all if Embedding.table_exists?
+      ex.run
+    ensure
+      ActiveJob::Base.queue_adapter = original
+    end
+
+    it "create enqueue un IndexHostJob" do
+      expect {
+        Host.create!(ip: "192.0.2.50")
+      }.to have_enqueued_job(IndexHostJob)
+    end
+
+    it "update d'un champ pertinent (fqdn) enqueue un IndexHostJob" do
+      host = Host.create!(ip: "192.0.2.51")
+      ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+
+      expect {
+        host.update!(fqdn: "x.example.fr")
+      }.to have_enqueued_job(IndexHostJob).with(host.id)
+    end
+
+    it "update sans changement de champ pertinent n'enqueue pas" do
+      host = Host.create!(ip: "192.0.2.52")
+      ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+
+      # touch ne change que updated_at, qui n'est PAS dans
+      # EMBEDDING_RELEVANT_COLS.
+      expect {
+        host.update_columns(created_at: Time.now.utc - 1.hour) # bypass callbacks
+      }.not_to have_enqueued_job(IndexHostJob)
+    end
+  end
 end

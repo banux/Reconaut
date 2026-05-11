@@ -83,6 +83,7 @@ nav:
   - Opérationnel:
       - Modèle de responsabilité: operating/responsibility-model.md
       - Providers d'embedding: operating/embedder-providers.md
+      - Pipeline d'embedding: operating/embedding-pipeline.md
       - Streaming agent_chat: operating/agent-chat-streaming.md
       - Exports MCP: operating/mcp-exports.md
       - Déploiement du site de doc: operating/doc-site-deployment.md

@@ -91,6 +91,7 @@ module Reconaut
       checks << check_auth_storage(probes, ctx)
       checks << check_mcp_tls_posture(probes, ctx)
       checks << check_embedder_health(probes, ctx)
+      checks << check_embedding_pipeline(probes, ctx)
 
       # ok = aucun :fail. Les statuts :info (provider externe configure)
       # et :unknown (lag pas encore mesure, normal au boot) sont
@@ -291,6 +292,37 @@ module Reconaut
       Check.new(name: "embedder_health", status: :info, details: details)
     rescue StandardError => e
       Check.new(name: "embedder_health", status: :unknown, details: e.message[0, 80])
+    end
+
+    # embedding_pipeline : reporte indexed/total hosts + last_indexed_at.
+    # Permet à l'opérateur de voir d'un coup d'œil si le pipeline
+    # IndexHostJob est en retard ou si la table est vide.
+    # Cf. add-embedding-pipeline §4.1.
+    def check_embedding_pipeline(_probes, _ctx)
+      return unknown_pipeline_check("modèle Embedding/Host absent") unless defined?(::Embedding) && defined?(::Host)
+      return unknown_pipeline_check("table embeddings absente") unless ::Embedding.table_exists?
+
+      indexed = ::Embedding.count
+      total   = ::Host.count
+      ratio   = total.zero? ? 1.0 : (indexed.to_f / total).round(2)
+      last    = ::Embedding.maximum(:indexed_at)
+
+      Check.new(
+        name:    "embedding_pipeline",
+        status:  :info,
+        details: {
+          indexed_hosts:   indexed,
+          total_hosts:     total,
+          ratio:           ratio,
+          last_indexed_at: last&.utc&.iso8601
+        }
+      )
+    rescue ::ActiveRecord::ActiveRecordError, ::PG::Error => e
+      unknown_pipeline_check(e.message[0, 80])
+    end
+
+    def unknown_pipeline_check(reason)
+      Check.new(name: "embedding_pipeline", status: :unknown, details: reason)
     end
 
     # mcp_tls_posture : valeur effective de RECONAUT_MCP_TLS_REQUIRED.

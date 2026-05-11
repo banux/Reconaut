@@ -150,4 +150,41 @@ namespace :reconaut do
     warn "WARNING: l'API key affichee ci-dessus n'est plus consultable. " \
          "Stockez-la maintenant, sinon il faudra en generer une autre."
   end
+
+  desc "Re-vectorise tous les hosts existants. RECONAUT_REINDEX_PURGE=true " \
+       "pour vider les embeddings d'un provider antérieur, " \
+       "RECONAUT_REINDEX_FILTER='ip:192.0.2.%' pour cibler un sous-ensemble."
+  task reindex: :environment do
+    registry = ::Reconaut::Registry.default
+    provider = registry.embedder.respond_to?(:provider) ? registry.embedder.provider : "unknown"
+
+    if %w[true 1 yes].include?(ENV["RECONAUT_REINDEX_PURGE"].to_s.downcase)
+      n = ::Embedding.where.not(provider: provider).delete_all
+      puts "[reindex] purged #{n} legacy embeddings (provider != #{provider})"
+    end
+
+    scope = ::Host.all
+    if (f = ENV["RECONAUT_REINDEX_FILTER"]).to_s.include?(":")
+      col, pattern = f.split(":", 2)
+      if %w[ip fqdn].include?(col)
+        scope = scope.where("#{col} LIKE ?", pattern)
+        puts "[reindex] filter applied: #{col} LIKE #{pattern.inspect}"
+      else
+        warn "[reindex] filter ignored: column #{col.inspect} not whitelisted (use ip or fqdn)"
+      end
+    end
+
+    total = scope.count
+    done  = 0
+    failed = 0
+    scope.find_each do |h|
+      ::Reconaut::EmbeddingIndexer.index!(h, embedder: registry.embedder)
+      done += 1
+      print "\r[reindex] #{done}/#{total}" if (done % 10).zero? || done == total
+    rescue StandardError => e
+      failed += 1
+      warn "\n[reindex] host=#{h.id} failed: #{e.class}: #{e.message}"
+    end
+    puts "\n[reindex] done : #{done}/#{total}#{failed.positive? ? " (#{failed} failed)" : ""}"
+  end
 end
