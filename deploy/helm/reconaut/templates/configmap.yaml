@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# ConfigMap : variables d'environnement non-sensibles partagées par
+# api + scanners. Les valeurs sensibles (passwords, API keys) vivent
+# dans le Secret associé.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "reconaut.fullname" . }}-config
+  labels:
+    {{- include "reconaut.labels" . | nindent 4 }}
+data:
+  RAILS_ENV: "production"
+  RAILS_LOG_TO_STDOUT: "1"
+
+  # MCP posture
+  RECONAUT_MCP_TLS_REQUIRED: {{ .Values.mcp.tlsRequired | quote }}
+
+  # Embedder
+  RECONAUT_EMBEDDER_PROVIDER: {{ .Values.embedder.provider | quote }}
+  {{- if eq .Values.embedder.provider "ollama" }}
+  RECONAUT_EMBEDDER_OLLAMA_URL: {{ required "embedder.ollama.url required when provider=ollama" .Values.embedder.ollama.url | quote }}
+  RECONAUT_EMBEDDER_OLLAMA_MODEL: {{ required "embedder.ollama.model required when provider=ollama" .Values.embedder.ollama.model | quote }}
+  {{- end }}
+  {{- if eq .Values.embedder.provider "mistral" }}
+  RECONAUT_EMBEDDER_MISTRAL_MODEL: {{ .Values.embedder.mistral.model | quote }}
+  {{- end }}
+  {{- if eq .Values.embedder.provider "openai-compatible" }}
+  RECONAUT_EMBEDDER_OPENAI_BASE_URL: {{ required "embedder.openai.baseUrl required when provider=openai-compatible" .Values.embedder.openai.baseUrl | quote }}
+  RECONAUT_EMBEDDER_OPENAI_MODEL: {{ required "embedder.openai.model required when provider=openai-compatible" .Values.embedder.openai.model | quote }}
+  {{- end }}

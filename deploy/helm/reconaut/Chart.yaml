@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+apiVersion: v2
+name: reconaut
+description: |
+  Base de connaissance d'actifs internet pour agents IA, scope-driven,
+  auto-hébergeable, AGPL-3.0. Mono-user en v1.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+home: https://github.com/banux/Reconaut
+sources:
+  - https://github.com/banux/Reconaut
+
+keywords:
+  - asm
+  - security
+  - mcp
+  - knowledge-base
+  - agpl
+
+maintainers:
+  - name: banux
+    url: https://github.com/banux
+
+annotations:
+  category: Security

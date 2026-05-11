@@ -1,0 +1,37 @@
+# Override docker-compose opt-in : sidecar Ollama pour utiliser un
+# embedder externe local. Copier en `docker-compose.override.yml`
+# (Docker l'applique automatiquement par-dessus le compose principal)
+# pour activer.
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   docker compose up -d
+#
+# Le service `ollama` est démarré ; le service `api` reçoit les
+# variables d'environnement qui le pointent. Ollama est OSS (MIT).
+#
+# Le modèle `nomic-embed-text` est pull au premier démarrage Ollama
+# (~250 MB). Pour pré-charger : docker exec reconaut-ollama ollama pull nomic-embed-text.
+#
+# Cf. docs/operating/embedder-providers.md pour les autres options
+# (Mistral cloud, OpenAI-compatible).
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: reconaut-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      # Expose seulement sur la loopback : pas d'API Ollama ouverte
+      # sur le réseau.
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+
+  api:
+    environment:
+      RECONAUT_EMBEDDER_PROVIDER: ollama
+      RECONAUT_EMBEDDER_OLLAMA_URL: http://ollama:11434
+      RECONAUT_EMBEDDER_OLLAMA_MODEL: nomic-embed-text
+
+volumes:
+  ollama_data:

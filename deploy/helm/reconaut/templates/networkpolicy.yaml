@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# NetworkPolicy restrictive : limite l'egress aux services internes
+# strictement requis. Activée par values.networkPolicy.enabled=true,
+# typiquement pour les déploiements air-gapped (cf. init §8.5).
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "reconaut.fullname" . }}
+  labels:
+    {{- include "reconaut.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "reconaut.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    # Autorise le trafic depuis n'importe quel pod du même namespace
+    # (Ingress controller, NetworkPolicies pair-à-pair gérées par
+    # l'opérateur si besoin de plus strict).
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 3000
+          protocol: TCP
+  egress:
+    # DNS interne k8s
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- if .Values.postgres.external }}
+    # Postgres externe : on autorise n'importe quelle destination
+    # (l'opérateur doit affiner via une CIDR rule si son cluster le
+    # permet). Pas de filtrage par IP fixe ici car postgres.host est
+    # libre.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Bloque le bord internet : 169.254.0.0/16 (link-local
+              # AWS/GCP metadata) — protection minimale.
+              - 169.254.0.0/16
+      ports:
+        - port: {{ .Values.postgres.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if eq .Values.embedder.provider "ollama" }}
+    # Sidecar Ollama (typiquement même namespace)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 11434
+          protocol: TCP
+    {{- end }}
+{{- end }}

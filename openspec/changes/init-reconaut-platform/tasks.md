@@ -199,9 +199,17 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Notes** : `syft` génère un SBOM par image, attaché à la release GitHub. Cosign keyless (OIDC GitHub Actions) signe images et SBOM.
   - **Test plan** : Chaque release publiée a un asset `sbom-<image>-vX.Y.Z.cdx.json` ; `cosign verify --certificate-identity-regexp ...` réussit sur chaque image release ; un check CI échoue si l'asset SBOM ou la signature manquent.
 
-- [ ] **8.3 Chart Helm et docker-compose de référence**
+- [x] **8.3 Chart Helm et docker-compose de référence**
   - **Notes** : Chart Helm sous `deploy/helm/reconaut` avec valeurs par défaut sécurisées (embedder local, auth locale, sans OIDC). `docker-compose.yml` à la racine pour le dev local et les déploiements simples (Postgres + Rails + scanner Go ; pas de Redis, pas de MinIO, pas d'Ollama imposé — Ollama est un override opt-in dans un compose.override.yml d'exemple).
   - **Test plan** : `helm install reconaut ./deploy/helm/reconaut --dry-run` produit un manifest valide ; `docker compose up -d` démarre la stack et le healthcheck `/healthz` répond 200 en moins de 60 s.
+  - **Statut** : Livré par `add-helm-chart` :
+    - **Dockerfiles minimaux** : `apps/api/Dockerfile` (ruby:3.4-slim + bundle + bootsnap precompile) et `apps/scanner/Dockerfile` (multi-stage golang:1.26 → distroless/static, dispatch via RECONAUT_SCAN_KIND). Multi-arch + SBOM + signing différés à `add-oci-release`.
+    - **docker-compose.yml** étendu : `api` (3000) + 6 `scanner-<kind>` + `postgres`. Healthchecks. Pas de Redis/MinIO/Ollama imposé. `docker-compose.override.yml.example` opt-in pour Ollama.
+    - **Chart Helm** `deploy/helm/reconaut/` : Chart.yaml v0.1.0, values.yaml defaults sécurisés (provider=local, tlsRequired=true, ingress off, networkPolicy off), 9 templates (deployment-api, deployment-scanner boucle Helm sur scan_kinds, service, configmap, secret, serviceaccount, ingress conditionnel, networkpolicy conditionnel, job-bootstrap hook pre-install/pre-upgrade, pvc-exports conditionnel), README chart. `helm lint` + `helm template` passent ; rendu = 7 Deployments + 1 Service + 1 ConfigMap + 1 Secret + 1 ServiceAccount + 1 Job.
+    - **Linter `check_helm_chart.sh`** + test wired in CI (azure/setup-helm@v4). Refuse les manifests qui contiennent `tenant_id`.
+    - **Docs** : `docs/operating/deployment-helm.md` (guide k8s complet : install, networkpolicy, ingress+cert-manager, troubleshooting) + `docs/operating/deployment-docker-compose.md` (guide local + Ollama override). Wirés dans mkdocs nav.
+    - BYO Postgres recommandé (pas de subchart bitnami imposé) ; subchart documenté en option.
+    - Acceptance line 252 (instance auto-hébergée via docker compose up) **est tickable** dès qu'un opérateur build les images localement.
 
 - [x] **8.4 Linter no-billing-no-feature-gate**
   - **Notes** : Script CI rejette tout import de SDK de facturation (`stripe`, `chargebee`, `paddle`, etc.) et tout chemin de code conditionné par une variable de licence (`if ENV["RECONAUT_LICENSE_KEY"]`, etc.).

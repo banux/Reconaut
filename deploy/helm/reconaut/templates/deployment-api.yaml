@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "reconaut.fullname" . }}-api
+  labels:
+    {{- include "reconaut.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "reconaut.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "reconaut.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: {{ include "reconaut.serviceAccountName" . }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: {{ include "reconaut.fullname" . }}-config
+            - secretRef:
+                name: {{ include "reconaut.fullname" . }}-secret
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources.api | nindent 12 }}
+          {{- if .Values.exports.persistence.enabled }}
+          volumeMounts:
+            - name: exports
+              mountPath: /app/tmp/exports
+          {{- end }}
+      {{- if .Values.exports.persistence.enabled }}
+      volumes:
+        - name: exports
+          persistentVolumeClaim:
+            claimName: {{ include "reconaut.fullname" . }}-exports
+      {{- end }}

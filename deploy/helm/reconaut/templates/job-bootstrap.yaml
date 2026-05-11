@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Helm hook : Job pre-install,pre-upgrade qui exécute
+# `rails db:migrate` puis `rails reconaut:set_password` pour
+# bootstrapper l'opérateur unique.
+#
+# Idempotent : set_password refuse si un user existe déjà (sauf
+# RECONAUT_ROTATE=true). Le hook tourne en pre-upgrade pour rejouer
+# `db:migrate` mais set_password no-op si tout est déjà fait.
+{{- if .Values.auth.bootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "reconaut.fullname" . }}-bootstrap
+  labels:
+    {{- include "reconaut.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "reconaut.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bootstrap
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "reconaut.serviceAccountName" . }}
+      containers:
+        - name: bootstrap
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              set -e
+              echo "[bootstrap] running db:migrate"
+              bundle exec rails db:migrate
+              echo "[bootstrap] running reconaut:set_password (idempotent)"
+              bundle exec rails reconaut:set_password || true
+          envFrom:
+            - configMapRef:
+                name: {{ include "reconaut.fullname" . }}-config
+            - secretRef:
+                name: {{ include "reconaut.fullname" . }}-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+{{- end }}

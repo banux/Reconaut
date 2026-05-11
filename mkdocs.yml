@@ -87,6 +87,8 @@ nav:
       - Pipeline d'embedding: operating/embedding-pipeline.md
       - Streaming agent_chat: operating/agent-chat-streaming.md
       - Exports MCP: operating/mcp-exports.md
+      - Déploiement Kubernetes (Helm): operating/deployment-helm.md
+      - Déploiement docker-compose: operating/deployment-docker-compose.md
       - Déploiement du site de doc: operating/doc-site-deployment.md
   - Intégrations:
       - Scanners externes: integrations/external-scanners.md

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# PVC pour tmp/exports/ (téléchargement one-shot des exports MCP,
+# cf. add-mcp-engine). Sans PVC, le stockage est éphémère et un restart
+# du pod API consomme les exports en cours.
+{{- if .Values.exports.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "reconaut.fullname" . }}-exports
+  labels:
+    {{- include "reconaut.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.exports.persistence.storageClass }}
+  storageClassName: {{ .Values.exports.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.exports.persistence.size }}
+{{- end }}

@@ -1,0 +1,149 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# values.yaml : valeurs par défaut sécurisées.
+#
+# Cf. openspec/changes/add-helm-chart/specs/open-source-governance/spec.md
+#   -> Requirement: Reference Helm Chart
+#
+# Defaults critiques (NE PAS désactiver à la légère) :
+#   - embedder.provider=local         → zéro réseau sortant
+#   - mcp.tlsRequired=true            → refuse clair (terminer TLS à l'ingress)
+#   - postgres.external=true          → l'opérateur BYO sa propre instance
+#   - ingress.enabled=false           → ouverture explicite par l'opérateur
+#   - networkPolicy.enabled=false     → off par défaut, on pour air-gapped
+
+# --- Images -----------------------------------------------------------------
+
+image:
+  repository: reconaut/api
+  # Tag figé : pas de `latest` pour éviter les pulls involontaires.
+  # Bumper explicitement à chaque release.
+  tag: 0.1.0-dev
+  pullPolicy: IfNotPresent
+
+scanner:
+  image:
+    repository: reconaut/scanner
+    tag: 0.1.0-dev
+    pullPolicy: IfNotPresent
+  # Liste exhaustive des scan_kinds livrés en v1. Helm boucle dessus
+  # pour générer un Deployment par kind.
+  kinds:
+    - tcp_probe
+    - tls_capture
+    - http_banner
+    - subdomain_enum
+    - service_fingerprint
+    - dns_records
+  replicas: 1
+
+# --- Postgres ---------------------------------------------------------------
+
+# BYO Postgres par défaut (recommandé pour la prod : HA, backup,
+# monitoring). Renseigner `url` OU bien `host` + `password`.
+postgres:
+  external: true
+  url: ""
+  # Alternative : composer une URL à partir des champs ci-dessous.
+  host: ""
+  port: 5432
+  database: reconaut_production
+  user: reconaut
+  password: ""
+
+# --- Embedder ---------------------------------------------------------------
+
+embedder:
+  # Défaut sécurisé : zéro réseau sortant. Pour basculer sur Ollama
+  # ou Mistral, voir docs/operating/embedder-providers.md.
+  provider: local
+  ollama:
+    url: ""
+    model: ""
+  mistral:
+    apiKey: ""
+    model: mistral-embed
+  openai:
+    baseUrl: ""
+    apiKey: ""
+    model: ""
+
+# --- MCP --------------------------------------------------------------------
+
+mcp:
+  # true (défaut) : refus du clair. L'ingress doit terminer TLS et
+  # poser le header `X-Forwarded-Proto: https`.
+  # false : posture interne (mTLS au reverse proxy en amont).
+  tlsRequired: true
+
+# --- Bootstrap opérateur ----------------------------------------------------
+
+auth:
+  bootstrap:
+    enabled: true
+    # Password de l'opérateur unique. Injecté via Secret. À fournir
+    # impérativement à la première install.
+    operatorPassword: ""
+
+# --- Réseau & exposition ----------------------------------------------------
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: reconaut.example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # Exemple TLS via cert-manager (à activer après avoir installé
+  # cert-manager et créé un Issuer) :
+  # tls:
+  #   - secretName: reconaut-tls
+  #     hosts: [reconaut.example.local]
+
+networkPolicy:
+  enabled: false
+  # Quand enabled=true, NE laisse sortir QUE vers (a) DNS interne k8s,
+  # (b) le service Postgres référencé, (c) optionnellement Ollama si
+  # provider=ollama. Cohérent avec init §8.5 (boot air-gapped).
+
+# --- ServiceAccount ---------------------------------------------------------
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# --- Resources --------------------------------------------------------------
+
+resources:
+  api:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  scanner:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# --- Stockage exports MCP (cf. add-mcp-engine) -----------------------------
+
+exports:
+  # PVC qui porte `tmp/exports/` côté Rails. Sans PVC, le stockage
+  # est éphémère (recyclé au restart). Recommandé en prod.
+  persistence:
+    enabled: false
+    storageClass: ""
+    size: 1Gi

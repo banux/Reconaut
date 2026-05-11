@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Un Deployment par scan_kind — cohérent avec replace-web-with-tui §3.1
+# (Workers de scan spécialisés). Helm boucle sur values.scanner.kinds.
+{{- $root := . -}}
+{{- range $kind := .Values.scanner.kinds }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "reconaut.fullname" $root }}-scanner-{{ $kind | replace "_" "-" }}
+  labels:
+    {{- include "reconaut.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: scanner
+    reconaut.io/scan-kind: {{ $kind }}
+spec:
+  replicas: {{ $root.Values.scanner.replicas }}
+  selector:
+    matchLabels:
+      {{- include "reconaut.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: scanner
+      reconaut.io/scan-kind: {{ $kind }}
+  template:
+    metadata:
+      labels:
+        {{- include "reconaut.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: scanner
+        reconaut.io/scan-kind: {{ $kind }}
+    spec:
+      serviceAccountName: {{ include "reconaut.serviceAccountName" $root }}
+      containers:
+        - name: scanner
+          image: "{{ $root.Values.scanner.image.repository }}:{{ $root.Values.scanner.image.tag }}"
+          imagePullPolicy: {{ $root.Values.scanner.image.pullPolicy }}
+          env:
+            - name: RECONAUT_SCAN_KIND
+              value: {{ $kind | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "reconaut.fullname" $root }}-config
+            - secretRef:
+                name: {{ include "reconaut.fullname" $root }}-secret
+          resources:
+            {{- toYaml $root.Values.resources.scanner | nindent 12 }}
+{{- end }}

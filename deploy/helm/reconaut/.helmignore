@@ -1,0 +1,13 @@
+.DS_Store
+.git/
+.gitignore
+.editorconfig
+.idea/
+.vscode/
+*.tmproj
+*.bak
+*.swp
+*.tgz
+*.orig
+.helmignore
+README.md.bak
