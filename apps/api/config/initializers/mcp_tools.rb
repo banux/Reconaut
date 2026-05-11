@@ -18,13 +18,15 @@ Rails.application.config.after_initialize do
   next if Rails.env.test? # les specs RSpec gèrent leur propre setup
   next unless defined?(Mcp::CoreTools) && defined?(Reconaut::Registry)
 
-  registry  = Reconaut::Registry.default
-  retriever = registry.hybrid_retriever || nil_retriever
+  registry = Reconaut::Registry.default
 
-  # Si aucun retriever n'a été câblé (par ex. Postgres pas dispo),
-  # on enregistre quand même les outils qui ne dépendent pas du
-  # retrieval pour préserver doctor / heartbeats.
-  next unless retriever
+  # Si aucun HybridRetriever n'est câblé (cas par défaut en dev :
+  # pipeline d'embedding pas encore branché), on passe un stub qui
+  # retourne une Response vide. Les tools qui dépendent du retrieval
+  # (`agent_chat`, `search_hosts`, `get_host`) sont quand même
+  # enregistrés et répondent `{rows: [], warnings: ["…"]}` plutôt que
+  # 404 unknown_tool. Mieux que de masquer toute la surface MCP.
+  retriever = registry.hybrid_retriever || StubRetriever.new
 
   Mcp::CoreTools.register_all!(
     retriever:          retriever,
@@ -36,13 +38,31 @@ Rails.application.config.after_initialize do
     scan_store:         registry.scan_store
   )
 
-  Rails.logger.info "[mcp] tools registered: #{Mcp::ToolRegistry.names.join(", ")}"
+  if registry.hybrid_retriever.nil?
+    Rails.logger.warn "[mcp] HybridRetriever not wired — retrieval tools return empty results (#{Mcp::ToolRegistry.names.size} tools registered)"
+  else
+    Rails.logger.info "[mcp] tools registered: #{Mcp::ToolRegistry.names.join(", ")}"
+  end
 end
 
-# Helper local : si le HybridRetriever n'est pas câblé en prod, on
-# log un avertissement plutôt qu'un crash. Les tests qui exigent un
-# retriever fonctionnel le câblent explicitement.
-def nil_retriever
-  warn "[mcp] no HybridRetriever wired in Registry — MCP tools depending on retrieval will be skipped"
-  nil
+# StubRetriever : retourne une Response vide quand aucun pipeline
+# d'embedding n'est câblé. Conserve l'enregistrement de l'outil
+# `agent_chat` / `search_hosts` (le client reçoit un 200 + rows=[],
+# warnings=[...] au lieu d'un 404 unknown_tool qui empêche toute
+# inspection de la surface MCP).
+#
+# Le pipeline réel est câblé par un futur change (cf.
+# `add-embedding-pipeline`) qui pose `Registry.default.hybrid_retriever`.
+class StubRetriever
+  def call(_query)
+    require "agent/hybrid_retriever" unless defined?(::Agent::HybridRetriever)
+
+    ::Agent::HybridRetriever::Response.new(
+      rows:           [],
+      citations:      [],
+      warnings:       ["retriever-not-wired"],
+      retrieval_path: "none",
+      duration_ms:    0
+    )
+  end
 end
