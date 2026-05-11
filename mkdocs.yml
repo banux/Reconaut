@@ -72,6 +72,7 @@ nav:
   - Positionnement:
       - Vue d'ensemble: positioning/agent-knowledge-base.md
   - Usage:
+      - Piloter avec reconautctl: usage/reconautctl.md
       - Déclarer son scope: usage/scope.md
   - Architecture:
       - Frontière de scan: architecture/scan-frontier.md
