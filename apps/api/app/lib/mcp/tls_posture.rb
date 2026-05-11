@@ -12,13 +12,31 @@ module Mcp
   module TlsPosture
     module_function
 
-    # Lecture stricte (case-insensitive). La valeur par défaut est
-    # `required` — c'est la posture "internet-facing" sécurisée. Un
-    # opérateur en déploiement strictement interne (mTLS au reverse
-    # proxy) peut explicitement la désactiver.
+    # Lecture stricte (case-insensitive) avec défaut par environnement :
+    #
+    #   - production / staging         → required (défaut sécurisé)
+    #   - development / test           → non required (friction zéro sur
+    #                                     `rails server` localhost)
+    #
+    # L'opérateur peut TOUJOURS surcharger via `RECONAUT_MCP_TLS_REQUIRED`
+    # (`true`/`false`/`1`/`0`/`yes`/`no`, case-insensitive). Quand l'env
+    # var n'est pas définie, le défaut suit l'environnement Rails.
     def required?
       raw = ENV["RECONAUT_MCP_TLS_REQUIRED"].to_s.downcase.strip
-      !%w[false 0 no].include?(raw)
+      return !%w[false 0 no].include?(raw) unless raw.empty?
+
+      # Pas d'env var explicite : on suit le défaut par Rails.env.
+      !permissive_env?
+    end
+
+    # permissive_env? : true en development/test, false ailleurs.
+    # Le fallback `true` quand Rails n'est pas chargé (cas exotique des
+    # specs unitaires hors Rails) garde le comportement permissif.
+    def permissive_env?
+      return true unless defined?(::Rails) && ::Rails.respond_to?(:env)
+
+      env = ::Rails.env
+      env.development? || env.test?
     end
 
     def allowed_in_clear?

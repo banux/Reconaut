@@ -35,15 +35,16 @@ RSpec.describe "MCP TLS posture", type: :request do
     Reconaut::Registry.reset!
   end
 
-  describe "posture required (défaut)" do
+  describe "posture required (override explicite)" do
+    # En `Rails.env.test?` le défaut est permissif (cohérence avec
+    # `rails_helper.rb` et avec l'expérience dev `rails server`). Pour
+    # valider le comportement `required`, on force l'override explicite
+    # via env var — c'est exactement comme un déploiement prod le ferait.
     around do |ex|
       original = ENV["RECONAUT_MCP_TLS_REQUIRED"]
-      ENV.delete("RECONAUT_MCP_TLS_REQUIRED") # = défaut required
+      ENV["RECONAUT_MCP_TLS_REQUIRED"] = "true"
       ex.run
     ensure
-      # Restauration explicite (même si original était nil) pour
-      # ne pas laisser ENV vide → les specs suivantes héritent du
-      # défaut sécurisé et planteraient.
       if original.nil?
         ENV["RECONAUT_MCP_TLS_REQUIRED"] = "false" # défaut rails_helper
       else
@@ -102,10 +103,23 @@ RSpec.describe "MCP TLS posture", type: :request do
       ENV["RECONAUT_MCP_TLS_REQUIRED"] = original
     end
 
-    it "défaut = required" do
+    it "défaut suit Rails.env : permissif en dev/test, required ailleurs" do
       ENV.delete("RECONAUT_MCP_TLS_REQUIRED")
+      # En test (Rails.env.test? == true) le défaut est permissif —
+      # cohérence avec rails_helper et `rails server` local.
+      expect(Rails.env.test?).to be true
+      expect(Mcp::TlsPosture.required?).to be false
+
+      # Force production-like → required redevient le défaut.
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       expect(Mcp::TlsPosture.required?).to be true
-      expect(Mcp::TlsPosture.allowed_in_clear?).to be false
+    end
+
+    it "override explicite via env var respecté (true en dev → required)" do
+      ENV["RECONAUT_MCP_TLS_REQUIRED"] = "true"
+      expect(Mcp::TlsPosture.required?).to be true
+      ENV["RECONAUT_MCP_TLS_REQUIRED"] = "false"
+      expect(Mcp::TlsPosture.required?).to be false
     end
 
     it "false / 0 / no → not required" do
@@ -122,8 +136,9 @@ RSpec.describe "MCP TLS posture", type: :request do
       Mcp::TlsPosture.log_at_boot!(logger)
     end
 
-    it "log_at_boot! émet un info avec posture=internet-facing par défaut" do
+    it "log_at_boot! émet un info avec posture=internet-facing en production" do
       ENV.delete("RECONAUT_MCP_TLS_REQUIRED")
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       logger = double("logger")
       expect(logger).to receive(:info).with(/posture=internet-facing/)
       Mcp::TlsPosture.log_at_boot!(logger)
