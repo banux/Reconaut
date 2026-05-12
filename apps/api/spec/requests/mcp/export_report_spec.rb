@@ -21,7 +21,20 @@ RSpec.describe "MCP export_report e2e", type: :request do
     }.new
   end
 
+  before(:all) do
+    @skip = nil
+    begin
+      ActiveRecord::Base.connection.execute("SELECT 1")
+      unless ActiveRecord::Base.connection.table_exists?(:hosts)
+        @skip = "Table hosts absente — lance `RAILS_ENV=test bundle exec rails db:migrate`"
+      end
+    rescue StandardError => e
+      @skip = "DB indisponible : #{e.message}"
+    end
+  end
+
   before do
+    skip(@skip) if @skip
     Mcp::ToolRegistry.reset!
     registry.scope_storage = storage
     ENV["RECONAUT_EXPORT_DIR"]  = tmpdir

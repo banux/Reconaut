@@ -101,12 +101,16 @@ RSpec.describe Host, type: :model do
 
   describe "embedding indexing hook (add-embedding-pipeline)" do
     around do |ex|
+      if @skip
+        ex.run
+        next
+      end
       original = ActiveJob::Base.queue_adapter
       ActiveJob::Base.queue_adapter = :test
       Embedding.delete_all if Embedding.table_exists?
       ex.run
     ensure
-      ActiveJob::Base.queue_adapter = original
+      ActiveJob::Base.queue_adapter = original if original
     end
 
     it "create enqueue un IndexHostJob" do

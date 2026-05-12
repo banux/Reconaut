@@ -9,7 +9,21 @@ require "rails_helper"
 #   -> Requirement: Backend de stockage auth interchangeable
 
 RSpec.describe "Auth::Storage ActiveRecord adapters" do
+  before(:all) do
+    @skip = nil
+    begin
+      ActiveRecord::Base.connection.execute("SELECT 1")
+      unless ActiveRecord::Base.connection.table_exists?(:api_keys) &&
+             ActiveRecord::Base.connection.table_exists?(:users)
+        @skip = "Tables api_keys/users absentes — lance `RAILS_ENV=test bundle exec rails db:migrate`"
+      end
+    rescue StandardError => e
+      @skip = "DB indisponible : #{e.message}"
+    end
+  end
+
   before do
+    skip(@skip) if @skip
     # Clean entre chaque example — pas de transactional fixtures
     # (cf. rails_helper.rb).
     Reconaut::Auth::ArApiKey.delete_all

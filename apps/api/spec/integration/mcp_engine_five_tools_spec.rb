@@ -27,7 +27,20 @@ RSpec.describe "MCP engine — les 5 tools de §5.1", type: :request do
     }.new
   end
 
+  before(:all) do
+    @skip = nil
+    begin
+      ActiveRecord::Base.connection.execute("SELECT 1")
+      unless ActiveRecord::Base.connection.table_exists?(:hosts)
+        @skip = "Table hosts absente — lance `RAILS_ENV=test bundle exec rails db:migrate`"
+      end
+    rescue StandardError => e
+      @skip = "DB indisponible : #{e.message}"
+    end
+  end
+
   before do
+    skip(@skip) if @skip
     Mcp::ToolRegistry.reset!
     registry.scope_storage = storage
     storage.create(kind: "ip", value: "192.0.2.10")
