@@ -1,0 +1,153 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Workflow CI de release : sur push d'un tag SemVer, build les images
+# api + scanner en multi-arch (amd64+arm64), génère un SBOM CycloneDX
+# par image, signe via cosign keyless (OIDC GitHub Actions), publie
+# sur GHCR + attache les SBOM à la release GitHub.
+#
+# Cf. openspec/changes/add-oci-release/specs/open-source-governance/spec.md
+#
+# Toutes les actions sont pinned par SHA pour la sécurité supply
+# chain (cf. add-oci-release proposal — bonnes pratiques GitHub).
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: write   # créer/éditer la release GitHub + uploader assets
+  packages: write   # push sur ghcr.io
+  id-token: write   # OIDC pour cosign keyless
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  ORG: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    name: build-${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            context: ./apps/api
+          - component: scanner
+            context: ./apps/scanner
+    outputs:
+      api_digest: ${{ steps.export.outputs.api_digest }}
+      scanner_digest: ${{ steps.export.outputs.scanner_digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up QEMU (pour cross-compile arm64 sur runner amd64)
+        uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.ORG }}/reconaut-${{ matrix.component }}
+          # Tag SemVer immuable + flottants major/minor + latest UNIQUEMENT
+          # pour les releases stables (cf. flavor latest=auto qui exclut
+          # automatiquement les pre-release `-rc`, `-alpha`, etc.).
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+          flavor: |
+            latest=auto
+
+      - name: Build and push (multi-arch)
+        id: build
+        uses: docker/build-push-action@2cdde995de11925a030ce8070c3d77a52ffcf1c0 # v5.3.0
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,scope=${{ matrix.component }},mode=max
+
+      - name: Export digest pour le job sbom-and-sign
+        id: export
+        run: |
+          echo "${{ matrix.component }}_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  sbom-and-sign:
+    name: sbom-and-sign-${{ matrix.component }}
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, scanner]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@e1523de7571e31dbe865fd2e80c5c7c23ae71eb4 # v3.4.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image ref
+        id: ref
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "ref=${{ env.REGISTRY }}/${{ env.ORG }}/reconaut-${{ matrix.component }}:${tag}" >> "$GITHUB_OUTPUT"
+          echo "filename=sbom-reconaut-${{ matrix.component }}-${tag}.cdx.json" >> "$GITHUB_OUTPUT"
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@61119d458adab75f756bc0b9e4bde25725f86a7a # v0.17.2
+        with:
+          image: ${{ steps.ref.outputs.ref }}
+          format: cyclonedx-json
+          output-file: ${{ steps.ref.outputs.filename }}
+          artifact-name: ${{ steps.ref.outputs.filename }}
+
+      - name: Sign image (cosign keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign --yes "${{ steps.ref.outputs.ref }}"
+
+      - name: Attest SBOM as cyclonedx predicate
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign attest --yes \
+            --type cyclonedx \
+            --predicate "${{ steps.ref.outputs.filename }}" \
+            "${{ steps.ref.outputs.ref }}"
+
+      - name: Upload SBOM as release asset
+        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564 # v2.0.4
+        with:
+          files: ${{ steps.ref.outputs.filename }}
+          fail_on_unmatched_files: true
+          # Crée la release si elle n'existe pas, sinon append les assets.
+          generate_release_notes: false

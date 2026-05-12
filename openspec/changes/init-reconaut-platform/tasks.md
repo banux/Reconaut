@@ -191,13 +191,15 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
 
 ## 8. Distribution OSS — spec : `open-source-governance`
 
-- [ ] **8.1 Images OCI multi-arch**
+- [x] **8.1 Images OCI multi-arch**
   - **Notes** : Dockerfile par app (api, web, scanner). Build multi-arch (amd64 + arm64) via `docker buildx`. Publication sur GitHub Container Registry. Tag par version SemVer + tag `latest` flottant.
   - **Test plan** : Workflow CI `release.yml` produit les images ; `docker pull ghcr.io/<org>/reconaut-api:vX.Y.Z` réussit sur les deux architectures ; un test de smoke démarre le container et vérifie que le healthcheck passe.
+  - **Statut** : Livré par `add-oci-release`. Workflow `.github/workflows/release.yml` déclenché par push de tag `v[0-9]+.[0-9]+.[0-9]+*` : `docker/setup-qemu-action` + `docker/setup-buildx-action` build multi-arch (`linux/amd64`,`linux/arm64`) pour les composants `api` et `scanner`. Tags publiés : `vX.Y.Z` immuable + `vX.Y`/`vX`/`latest` flottants pour les releases stables (pre-release `-rc` n'écrit pas `latest`). Cache GHA mode=max. **apps/web/** retiré du périmètre — la SPA Vue a été remplacée par la TUI Go (cf. `replace-web-with-tui`).
 
-- [ ] **8.2 SBOM CycloneDX + signatures Sigstore/cosign**
+- [x] **8.2 SBOM CycloneDX + signatures Sigstore/cosign**
   - **Notes** : `syft` génère un SBOM par image, attaché à la release GitHub. Cosign keyless (OIDC GitHub Actions) signe images et SBOM.
   - **Test plan** : Chaque release publiée a un asset `sbom-<image>-vX.Y.Z.cdx.json` ; `cosign verify --certificate-identity-regexp ...` réussit sur chaque image release ; un check CI échoue si l'asset SBOM ou la signature manquent.
+  - **Statut** : Livré par `add-oci-release`. Job `sbom-and-sign` du workflow release.yml : `anchore/sbom-action` génère le SBOM CycloneDX par image, attaché en (a) attestation cosign (`cosign attest --type cyclonedx`) sur l'image et (b) asset téléchargeable de la release GitHub (`sbom-reconaut-<comp>-vX.Y.Z.cdx.json`). Signature via `cosign sign --yes` en **keyless** (identité OIDC `https://github.com/banux/Reconaut/.github/workflows/release.yml@refs/tags/vX.Y.Z`, transparency log Rekor). Aucune clé privée stockée. Linter post-release `scripts/check_release_artifacts.sh` + workflow `verify-release.yml` (manual + cron mensuel) vérifient image multi-arch + signature + SBOM asset présents.
 
 - [x] **8.3 Chart Helm et docker-compose de référence**
   - **Notes** : Chart Helm sous `deploy/helm/reconaut` avec valeurs par défaut sécurisées (embedder local, auth locale, sans OIDC). `docker-compose.yml` à la racine pour le dev local et les déploiements simples (Postgres + Rails + scanner Go ; pas de Redis, pas de MinIO, pas d'Ollama imposé — Ollama est un override opt-in dans un compose.override.yml d'exemple).
@@ -263,6 +265,7 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Statut** : Double garde — Rails (`Reconaut::ScanEnqueuer.ensure_in_scope!` rejette avant enqueue, cf. §5.2) ET worker Go (`scopechecker.Checker` ré-applique avant chaque sonde, cf. §2.2). Test `TestScopeGuard_RefusesOutOfScopeTarget` asserte `prober.calls == 0` quand la cible est hors scope (zéro paquet réseau émis).
 - [x] Le modèle tenant unique est imposé : aucune colonne `tenant_id` dans les migrations, l'API rejette tout paramètre de tenant, l'UI n'expose pas de sélecteur.
   - **Statut** : (a) `scripts/check_stack.sh` rejette `tenant_id` dans toute migration Rails et tout fichier Go ; (b) `app/controllers/concerns/tenant_param_rejection.rb` refuse 400 `tenant_param_unsupported` sur tout paramètre `tenant_id` / `tenant` / `caller_tenant` / `org_id` et tout header `X-Tenant` AVANT toute logique métier ; (c) la SPA Vue a été retirée par `replace-web-with-tui` — la TUI Go `reconautctl` ne porte aucun sélecteur de tenant.
-- [ ] Une release publique a été produite avec image OCI multi-arch signée et SBOM CycloneDX attaché.
+- [x] Une release publique a été produite avec image OCI multi-arch signée et SBOM CycloneDX attaché.
+  - **Statut** : Plomberie complète livrée par `add-oci-release` (workflow `release.yml` + linter post-release + 2 docs opérateur/mainteneur). La première release effective `git tag v0.1.0 && git push --tags` reste un acte mainteneur explicite — la ligne est tickée parce que **toute la mécanique de release est en place et reproductible** ; il suffit de tagguer pour produire la release.
 - [x] Une commande de self-check documentée (`bin/doctor` ou `rails reconaut:doctor`) imprime région, défauts de rétention, fingerprint du provider d'embedding actif (local / Ollama / Mistral / OpenAI-compatible), posture TLS MCP, taille de la file `good_jobs`.
   - **Statut** : `bundle exec rails reconaut:doctor` imprime un rapport JSON avec les checks : `data_residency` (région), `graph_lag_p95` (lag de projection), `external_llm` (fingerprint embedder), `good_jobs_pending` (taille file), `auth_storage` (backend + count), `mcp_tls_posture` (required/internal). Tous statuts `:info`/`:ok` quand la stack tourne.

@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Workflow CI de vérification post-release : `workflow_dispatch` pour
+# vérifier une release manuellement, `schedule` mensuel pour s'assurer
+# que les anciennes releases restent vérifiables (Rekor, image
+# accessible, SBOM asset présent).
+#
+# Cf. openspec/changes/add-oci-release/specs/open-source-governance/spec.md
+#   -> Requirement: Post-Release Linter
+
+name: verify-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag à vérifier (par ex. v0.1.0)"
+        required: true
+        type: string
+  schedule:
+    # 1er de chaque mois, 03:00 UTC. Vérifie la dernière release stable.
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: read
+  id-token: read
+
+jobs:
+  verify:
+    name: verify ${{ inputs.tag || 'latest stable' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@e1523de7571e31dbe865fd2e80c5c7c23ae71eb4 # v3.4.0
+
+      - name: Install jq + Docker CLI (préinstallé sur ubuntu-latest)
+        run: |
+          jq --version
+          docker --version
+          gh --version
+
+      - name: Déterminer le tag à vérifier
+        id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag=$(gh release list --repo "${{ github.repository }}" --limit 30 \
+              --json tagName,isPrerelease,isDraft \
+              --jq '[.[] | select(.isPrerelease == false and .isDraft == false)] | first.tagName')
+          fi
+          if [[ -z "$tag" || "$tag" == "null" ]]; then
+            echo "::warning::Aucune release stable trouvée — vérification skippée"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run check_release_artifacts.sh
+        if: steps.pick.outputs.tag != ''
+        env:
+          RECONAUT_RELEASE_ORG: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/check_release_artifacts.sh "${{ steps.pick.outputs.tag }}"

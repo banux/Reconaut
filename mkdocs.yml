@@ -89,6 +89,8 @@ nav:
       - Exports MCP: operating/mcp-exports.md
       - Déploiement Kubernetes (Helm): operating/deployment-helm.md
       - Déploiement docker-compose: operating/deployment-docker-compose.md
+      - Processus de release (mainteneur): operating/release-process.md
+      - Vérifier une image (opérateur): operating/verify-image.md
       - Déploiement du site de doc: operating/doc-site-deployment.md
   - Intégrations:
       - Scanners externes: integrations/external-scanners.md
