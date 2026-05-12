@@ -91,7 +91,11 @@ Les sondeurs MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
    `schema_version: int` est obligatoire.
 4. **Idempotence.** Chaque message porte une `idempotency_key` stable.
    Les workers Go en font la clef de deduplication cote ingestion des
-   resultats.
+   resultats. Depuis [`add-scanner-pgx-driver`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-scanner-pgx-driver/proposal.md),
+   les workers persistent leurs `Result` dans la table Postgres
+   `scan_results` via `INSERT ... ON CONFLICT (idempotency_key) DO
+   NOTHING RETURNING idempotency_key` — la déduplication est donc
+   forte au niveau DB (PRIMARY KEY).
 5. **At-least-once.** GoodJob garantit qu'un job est livre au moins une
    fois ; les retries sont gérés par GoodJob. Les workers doivent etre
    resilients aux relivraisons (cf. point 4).

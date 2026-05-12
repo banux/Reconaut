@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
@@ -105,4 +106,80 @@ func TestRun_ConsumesQueueScopedByKind(t *testing.T) {
 		// problème pour le test (il sera tué à la fin du process Go).
 	}
 	_ = strings.TrimSpace
+}
+
+// TestPgxDriverRegistered : le blank import enregistre bien "pgx"
+// auprès de database/sql. C'est l'invariant central — sans lui le
+// sql.Open échoue silencieusement (lazy) puis le Ping retourne une
+// erreur cryptique.
+//
+// Cf. openspec/changes/add-scanner-pgx-driver/specs/scanning/spec.md
+//   -> Requirement: Postgres-Backed Scanner Stores
+func TestPgxDriverRegistered(t *testing.T) {
+	found := false
+	for _, d := range sql.Drivers() {
+		if d == "pgx" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("pgx driver not registered ; sql.Drivers()=%v", sql.Drivers())
+	}
+}
+
+// TestWireStores_DryRun : retourne les in-memory stores sans toucher
+// la DB. Le closeFn est un no-op.
+func TestWireStores_DryRun(t *testing.T) {
+	js, rs, closeFn, err := wireStores(Config{}, "", true)
+	if err != nil {
+		t.Fatalf("wireStores: %v", err)
+	}
+	if _, ok := js.(*goodjob.InMemoryStore); !ok {
+		t.Errorf("expected *goodjob.InMemoryStore, got %T", js)
+	}
+	if _, ok := rs.(*results.InMemoryStore); !ok {
+		t.Errorf("expected *results.InMemoryStore, got %T", rs)
+	}
+	// closeFn must not panic.
+	closeFn()
+}
+
+// TestWireStores_BadURLFailsFast : avec un URL pointant vers un port
+// fermé, la connexion sql.Open est lazy mais le Ping doit échouer
+// dans le timeout strict (≤ 2 s) avec un message qui mentionne "db ping".
+func TestWireStores_BadURLFailsFast(t *testing.T) {
+	url := "postgres://reconaut:nope@127.0.0.1:65534/reconaut_test?sslmode=disable"
+	start := time.Now()
+	js, rs, closeFn, err := wireStores(Config{}, url, false)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		// closeFn n'est utile que sur le chemin succès
+		if closeFn != nil {
+			closeFn()
+		}
+		t.Fatalf("expected error on unreachable DB, got js=%v rs=%v", js, rs)
+	}
+	if !strings.Contains(err.Error(), "db ping") {
+		t.Errorf("error should mention 'db ping', got %q", err.Error())
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("fail-fast violated: took %v (expected ≤ 2s + slack)", elapsed)
+	}
+}
+
+// TestWireStores_NoDriverLinkedMessageGone : on s'assure que l'ancien
+// message historique cryptique n'est plus jamais émis. Si quelqu'un
+// retire le blank import, la query echouera avec "unknown driver"
+// plutôt qu'avec "no DB driver linked".
+func TestWireStores_NoDriverLinkedMessageGone(t *testing.T) {
+	url := "postgres://reconaut:nope@127.0.0.1:65534/db?sslmode=disable"
+	_, _, _, err := wireStores(Config{}, url, false)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "no DB driver linked") {
+		t.Errorf("legacy message survived : %q", err.Error())
+	}
 }

@@ -98,7 +98,7 @@ docker exec -it reconaut-postgres psql -U reconaut -d reconaut_development
 
 Deux volumes Docker :
 
-- `postgres_data` : toutes les données applicatives (hosts, services, scans, embeddings, audit_log, users, api_keys).
+- `postgres_data` : toutes les données applicatives (hosts, services, scans, scan_results, embeddings, audit_log, users, api_keys).
 - `exports_data` : exports MCP générés par le tool `export_report` (téléchargement one-shot).
 
 Backup :
@@ -109,6 +109,24 @@ docker exec reconaut-postgres pg_dump -U reconaut reconaut_development > backup.
 
 # Restore
 docker exec -i reconaut-postgres psql -U reconaut reconaut_development < backup.sql
+```
+
+## Configuration des workers Go (RECONAUT_DATABASE_URL)
+
+Depuis [`add-scanner-pgx-driver`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-scanner-pgx-driver/proposal.md), les binaires `scanner-<kind>` consomment la file `good_jobs` et écrivent leurs résultats dans la table `scan_results` via le pilote `pgx/v5/stdlib`. Chaque worker DOIT recevoir :
+
+```sh
+RECONAUT_DATABASE_URL=postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development?sslmode=disable
+```
+
+(En prod : `sslmode=require` minimum.) Sans cette variable, le worker exit non-zéro au démarrage avec un message `db ping: ...`. Le mode `--dry-run` court-circuite la DB et reste utile pour des tests d'intégration locaux.
+
+Calibrage `max_connections` Postgres : chaque worker plafonne à **8 conns** (cf. `runtime.wireStores` : `SetMaxOpenConns(8)`). Avec 6 workers (`tcp_probe`, `tls_capture`, `http_banner`, `subdomain_enum`, `service_fingerprint`, `dns_records`), prévoir au minimum **48 conns + le pool Rails**. Le défaut Postgres est 100 — suffisant en dev local.
+
+Migration de la table `scan_results` :
+
+```sh
+docker exec reconaut-api bundle exec rails db:migrate
 ```
 
 ## Mise à jour

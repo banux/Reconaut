@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_10_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_13_000001) do
   create_schema "reconaut"
 
   # These are extensions that must be enabled in order to support this database
@@ -139,6 +139,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_10_000001) do
     t.index ["fqdn"], name: "idx_hosts_fqdn", where: "(fqdn IS NOT NULL)"
     t.index ["ip"], name: "idx_hosts_ip", where: "(ip IS NOT NULL)"
     t.check_constraint "ip IS NOT NULL OR fqdn IS NOT NULL", name: "hosts_at_least_one_identifier"
+  end
+
+  create_table "reconaut.scan_results", primary_key: "idempotency_key", id: :text, force: :cascade do |t|
+    t.datetime "created_at", default: -> { "now()" }, null: false
+    t.datetime "observed_at", null: false
+    t.text "scan_kind", null: false
+    t.text "status", null: false
+    t.text "target_kind", null: false
+    t.text "target_value", null: false
+    t.datetime "updated_at", default: -> { "now()" }, null: false
+    t.index ["observed_at"], name: "index_scan_results_on_observed_at"
+    t.index ["scan_kind"], name: "index_scan_results_on_scan_kind"
+    t.index ["target_kind", "target_value"], name: "index_scan_results_on_target_kind_and_target_value"
   end
 
   create_table "reconaut.scan_scope_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

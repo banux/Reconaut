@@ -19,6 +19,7 @@ package runtime
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -26,6 +27,13 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	// Blank import : enregistre le pilote "pgx" auprès de database/sql
+	// pour que sql.Open("pgx", url) fonctionne dans TOUS les binaires
+	// scanner-<kind> sans modifier leur main. Cf. add-scanner-pgx-driver
+	// §1.2 (proposal.md + specs/scanning/spec.md → Postgres-Backed
+	// Scanner Stores).
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/banux/Reconaut/apps/scanner/internal/goodjob"
 	"github.com/banux/Reconaut/apps/scanner/internal/results"
@@ -111,7 +119,7 @@ func Run(cfg Config) int {
 	return 0
 }
 
-func wireStores(cfg Config, _ string, dryRun bool) (goodjob.Store, results.Store, func(), error) {
+func wireStores(cfg Config, dbURL string, dryRun bool) (goodjob.Store, results.Store, func(), error) {
 	if cfg.JobStore != nil && cfg.ResultStore != nil {
 		return cfg.JobStore, cfg.ResultStore, func() {}, nil
 	}
@@ -126,7 +134,30 @@ func wireStores(cfg Config, _ string, dryRun bool) (goodjob.Store, results.Store
 		}
 		return jobStore, resStore, func() {}, nil
 	}
-	return nil, nil, nil, fmt.Errorf("no DB driver linked ; pass --dry-run for in-memory stores")
+
+	// Mode SQL : pilote pgx enregistré par le blank import en haut de
+	// fichier. sql.Open est lazy → on valide la connexion via
+	// PingContext avec un timeout strict pour fail-fast clair (au
+	// lieu de l'ancien cryptique "no DB driver linked").
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("open db: %w", err)
+	}
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(2)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := db.PingContext(pingCtx); err != nil {
+		_ = db.Close()
+		return nil, nil, nil, fmt.Errorf("db ping: %w", err)
+	}
+
+	jobStore := goodjob.NewSQLStore(db)
+	resStore := results.NewSQLStore(db)
+	closeFn := func() { _ = db.Close() }
+	return jobStore, resStore, closeFn, nil
 }
 
 func defaultDur(v, fallback time.Duration) time.Duration {

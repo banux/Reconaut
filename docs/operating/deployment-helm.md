@@ -176,15 +176,22 @@ Causes fréquentes :
 
 ### Les pods `scanner-*` redémarrent en boucle
 
-Cause habituelle : pas de driver Postgres dans les binaires Go (cf. `apps/scanner/cmd/scanner-worker/db.go`, placeholder hérité). En attendant `add-scanner-pgx-driver` futur, lance les workers en mode `--dry-run` via un override :
+Depuis [`add-scanner-pgx-driver`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-scanner-pgx-driver/proposal.md) les binaires `scanner-<kind>` ouvrent une connexion Postgres au démarrage via le pilote `pgx/v5/stdlib`. Si la connexion échoue, le binaire **exit non-zéro dans ≤ 2 s** avec un message du type `db ping: ...`. Causes habituelles :
+
+- `RECONAUT_DATABASE_URL` mal forgée dans le manifest (Secret manquant, `host=` incorrect, port fermé).
+- Postgres injoignable depuis le namespace `scanner-*` (NetworkPolicy trop stricte).
+- Tables `good_jobs` ou `scan_results` absentes (`db:migrate` non joué — relance le Job bootstrap).
+- `sslmode=require` en prod et certificat serveur non monté côté worker.
+
+Recommandation prod : `sslmode=require` minimum (ou `verify-full` avec CA monté), et calibrer `max_connections` Postgres en fonction du nombre de pods × `MaxOpenConns(8)` du worker + le pool Rails.
+
+Si tu veux temporairement arrêter les workers (par ex. pour debugger sans bruit) :
 
 ```sh
 helm upgrade reconaut deploy/helm/reconaut \
   --reuse-values \
   --set scanner.replicas=0
 ```
-
-Le scan async ne fonctionnera pas, mais le reste (scope, search, agent_chat) tourne.
 
 ### `agent_chat` retourne `warnings: ["retriever-not-wired"]`
 
