@@ -11,7 +11,9 @@ require_relative "../reconaut/heartbeats"
 require_relative "../reconaut/scans"
 require_relative "../reconaut/ingest_scan_result"
 require_relative "../reconaut/exporter"
-require_relative "../../use_cases/scopes/operations"
+require_relative "../../use_cases/scopes/list"
+require_relative "../../use_cases/scopes/add"
+require_relative "../../use_cases/scopes/revoke"
 
 module Mcp
   # Set initial d'outils MCP (read-only en priorite). Les outils
@@ -86,9 +88,9 @@ module Mcp
       end
 
       # add_scope : ajoute une entrée de scope (cidr / domain / ip / host)
-      # via le use case Scopes::UseCases::Add. Le contrôle d'accès est
-      # porté par le scope MCP `write:scopes` ; le use case ne vérifie
-      # plus de rôle (cf. openspec/changes/single-user-only/).
+      # via le use case Scopes::Add. Le contrôle d'accès est porté par
+      # le scope MCP `write:scopes` ; le use case ne vérifie plus de
+      # rôle (cf. openspec/changes/single-user-only/).
       ToolRegistry.register(
         name:   "add_scope",
         scopes: [:"write:scopes"],
@@ -97,7 +99,7 @@ module Mcp
           value: { type: :string, min_length: 1, max_length: 255 }
         }
       ) do |params:, caller_id:|
-        result = Scopes::UseCases::Add
+        result = Scopes::Add
                    .new(storage: scope_storage)
                    .call(
                      kind:      params[:kind],
@@ -122,7 +124,7 @@ module Mcp
           id: { type: :string, min_length: 1, max_length: 64 }
         }
       ) do |params:, caller_id:|
-        result = Scopes::UseCases::Revoke
+        result = Scopes::Revoke
                    .new(storage: scope_storage)
                    .call(
                      id:        params[:id],

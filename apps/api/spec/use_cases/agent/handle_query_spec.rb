@@ -7,7 +7,7 @@ require_relative "../../../app/lib/agent/audit_recorder"
 # En mode mono-user (cf. openspec/changes/single-user-only/), le use
 # case ne porte plus de contrôle de rôle — l'autorisation se fait via
 # le scope MCP `agent:chat` au niveau du tool.
-RSpec.describe Agent::UseCases::HandleQuery do
+RSpec.describe Agent::HandleQuery do
   class FakeRetriever
     def initialize(response)
       @response = response

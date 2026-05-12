@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require_relative "../../../app/use_cases/scopes/operations"
+require_relative "../../../app/use_cases/scopes/list"
+require_relative "../../../app/use_cases/scopes/add"
+require_relative "../../../app/use_cases/scopes/revoke"
 require_relative "../../../app/lib/agent/audit_recorder"
 
 # En mode mono-user (cf. openspec/changes/single-user-only/), les use
@@ -14,7 +16,7 @@ RSpec.describe "Scopes use cases" do
   let(:storage) { Scopes::Storage::InMemory.new }
   let(:audit)   { Agent::AuditRecorder::InMemoryRecorder.new }
 
-  describe Scopes::UseCases::List do
+  describe Scopes::List do
     subject(:use_case) { described_class.new(storage: storage) }
 
     it "lit la liste des scopes" do
@@ -31,7 +33,7 @@ RSpec.describe "Scopes use cases" do
     end
   end
 
-  describe Scopes::UseCases::Add do
+  describe Scopes::Add do
     subject(:use_case) { described_class.new(storage: storage, audit_recorder: audit) }
 
     it "crée un scope + audit success" do
@@ -60,7 +62,7 @@ RSpec.describe "Scopes use cases" do
     end
   end
 
-  describe Scopes::UseCases::Revoke do
+  describe Scopes::Revoke do
     subject(:use_case) { described_class.new(storage: storage, audit_recorder: audit) }
 
     it "renvoie 404 sur id inconnu + audit param_invalid" do
