@@ -6,11 +6,25 @@ require "rails_helper"
 #   -> Requirement: Host Indexing Pipeline
 
 RSpec.describe IndexHostJob, type: :job do
+  before(:all) do
+    @skip = nil
+    begin
+      ActiveRecord::Base.connection.execute("SELECT 1")
+      unless ActiveRecord::Base.connection.table_exists?(:hosts)
+        @skip = "Table hosts absente — lance `RAILS_ENV=test bundle exec rails db:migrate`"
+      end
+    rescue StandardError => e
+      @skip = "DB indisponible : #{e.message}"
+    end
+  end
+
   before do
     ActiveJob::Base.queue_adapter = :test
   end
 
   describe "#perform" do
+    before { skip(@skip) if @skip }
+
     it "invoque EmbeddingIndexer.index! avec le host trouvé" do
       host = Host.create!(ip: "192.0.2.42")
       expect(Reconaut::EmbeddingIndexer).to receive(:index!).with(host)

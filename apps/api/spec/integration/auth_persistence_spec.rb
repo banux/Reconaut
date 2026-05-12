@@ -16,7 +16,21 @@ require "rails_helper"
 #   -> Scenario: Cycle bootstrap → login depuis un autre process
 
 RSpec.describe "Auth persistence cross-process", type: :request do
+  before(:all) do
+    @skip = nil
+    begin
+      ActiveRecord::Base.connection.execute("SELECT 1")
+      unless ActiveRecord::Base.connection.table_exists?(:users) &&
+             ActiveRecord::Base.connection.table_exists?(:api_keys)
+        @skip = "Tables users/api_keys absentes — lance `RAILS_ENV=test bundle exec rails db:migrate`"
+      end
+    rescue StandardError => e
+      @skip = "DB indisponible : #{e.message}"
+    end
+  end
+
   before do
+    skip(@skip) if @skip
     # Reset systématique : la base est partagée mais les state mémoires
     # (Registry singleton + password_hasher Plain par défaut) sont
     # neutralisés.
