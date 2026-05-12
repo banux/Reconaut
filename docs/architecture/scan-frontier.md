@@ -60,8 +60,22 @@ a posteriori par la couche d'analyse Rails. Variables d'env :
 `RECONAUT_HTTP_PROBE_MAX_BODY_KB` (défaut 32),
 `RECONAUT_HTTP_PROBE_USER_AGENT` (défaut `Reconaut/<version> (+...)`).
 
-Les sondeurs RDP, MQTT, CoAP, Modbus seront ajoutés par des changes
-dédiés.
+Le binaire `service_fingerprint` couvre **aussi RDP** depuis
+[`add-rdp-probe`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-rdp-probe/proposal.md) :
+sur TCP/3389, il envoie un X.224 Connection Request portant un
+RDP Negotiation Request, parse la `Connection Confirm` pour capturer
+`protocol_version` + `security_flags` (`PROTOCOL_RDP|SSL|HYBRID|RDSTLS|
+HYBRID_EX`), et — si `PROTOCOL_SSL` est annoncé — fait un handshake
+TLS (`InsecureSkipVerify=true`) uniquement pour capturer le certificat
+serveur (SHA-256, SANs, `NotAfter`). **Aucun message MCS Connect-Initial
+n'est envoyé** ; aucun credential (password, NTLM, Kerberos, CredSSP)
+n'apparaît jamais dans le code prod, garanti statiquement par
+`scripts/check_rdp_probe_no_auth.sh`. Variables d'env :
+`RECONAUT_RDP_PROBE_TIMEOUT` (défaut 5 s),
+`RECONAUT_RDP_PROBE_DISABLE_TLS_UPGRADE` (`true`/`1` pour désactiver
+le capture du cert même si SSL annoncé).
+
+Les sondeurs MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
 
 ## Principes intangibles
 

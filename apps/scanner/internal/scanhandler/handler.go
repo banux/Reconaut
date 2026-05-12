@@ -106,6 +106,31 @@ type HTTPProbeResult struct {
 	Outcome       string            `json:"outcome"`
 }
 
+// RDPProber est l'interface invoquée pour les jobs
+// scan_kind="service_fingerprint" qui ciblent un host avec port=3389
+// (ou options.protocols inclut "rdp"). Le binaire scanner-service_fingerprint
+// injecte une implémentation backée par internal/rdpprobe.
+//
+// Cf. openspec/changes/add-rdp-probe/tasks.md §2.1.
+type RDPProber interface {
+	Probe(ctx context.Context, target string, port int) (RDPProbeResult, error)
+}
+
+// RDPProbeResult est le format minimal qu'un RDPProber retourne au
+// handler. Mappable 1:1 avec rdpprobe.Result sans coupler ce package
+// à rdpprobe.
+type RDPProbeResult struct {
+	ProtocolVersion        uint32   `json:"protocol_version"`
+	SecurityFlags          []string `json:"security_flags"`
+	NegotiationFailureCode uint32   `json:"negotiation_failure_code"`
+	TLSCertSHA256          string   `json:"tls_cert_sha256"`
+	TLSSANs                []string `json:"tls_sans"`
+	TLSNotAfter            string   `json:"tls_not_after"`
+	DurationMs             int      `json:"duration_ms"`
+	BytesReceived          int      `json:"bytes_received"`
+	Outcome                string   `json:"outcome"`
+}
+
 // ScopeChecker est la garde de défense-en-profondeur invoquée AVANT
 // chaque sonde : si la cible n'est pas couverte par une entrée de
 // scope active, le handler refuse de probe — aucun paquet réseau
@@ -125,6 +150,7 @@ type Options struct {
 	DNSProber    DNSProber
 	SSHProber    SSHProber
 	HTTPProber   HTTPProber
+	RDPProber    RDPProber
 	ScopeChecker ScopeChecker
 	Clock        func() time.Time
 }
@@ -181,6 +207,10 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 
 		if scanKind == "service_fingerprint" && shouldProbeSSH(job.Params) {
 			return handleSSHProbe(ctx, store, opts.SSHProber, clock, idemKey, scanKind, targetKind, targetValue, sshPort(job.Params))
+		}
+
+		if scanKind == "service_fingerprint" && shouldProbeRDP(job.Params) {
+			return handleRDPProbe(ctx, store, opts.RDPProber, clock, idemKey, scanKind, targetKind, targetValue, rdpPort(job.Params))
 		}
 
 		if scanKind == "http_banner" {
@@ -506,6 +536,81 @@ func hasTLSInFindings(params map[string]any, wantPort int) bool {
 		}
 	}
 	return false
+}
+
+// shouldProbeRDP décide si un job service_fingerprint doit déclencher
+// le sondeur RDP. Critères (cf. add-rdp-probe §2.1) :
+//
+//   - target_kind ∈ {ip, host}
+//   - findings contient {port: 3389}, OU options.protocols inclut "rdp"
+//
+// Si le payload ne précise rien, on retourne false : le sondeur n'est
+// pas invoqué tant qu'un autre acteur (scanner-tcp_probe en amont,
+// ou un agent IA) n'a pas déclaré le port 3389 ouvert.
+func shouldProbeRDP(params map[string]any) bool {
+	targetKind, _ := extractTarget(params)
+	if targetKind != "ip" && targetKind != "host" {
+		return false
+	}
+	if hasPortInFindings(params, 3389) {
+		return true
+	}
+	if hasProtocolInOptions(params, "rdp") {
+		return true
+	}
+	return false
+}
+
+// rdpPort retourne le port RDP à sonder, par défaut 3389.
+func rdpPort(params map[string]any) int {
+	if p, ok := portFromFindings(params, "rdp"); ok {
+		return p
+	}
+	if hasPortInFindings(params, 3389) {
+		return 3389
+	}
+	return 3389
+}
+
+// handleRDPProbe applique la sonde RDP et persiste un Result dont le
+// champ Status sérialise en JSON le RDPProbeResult.
+func handleRDPProbe(ctx context.Context, store results.Store, prober RDPProber,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string, port int) error {
+	if prober == nil {
+		result := results.Result{
+			IdempotencyKey: idemKey,
+			ScanKind:       scanKind,
+			TargetKind:     targetKind,
+			TargetValue:    targetValue,
+			Status:         "skipped (no RDPProber wired)",
+			ObservedAt:     clock().UTC(),
+		}
+		_, err := store.Insert(ctx, result)
+		return err
+	}
+
+	probeRes, err := prober.Probe(ctx, targetValue, port)
+	if err != nil {
+		return fmt.Errorf("scan_handler: rdp probe: %w", err)
+	}
+
+	payload, err := json.Marshal(probeRes)
+	if err != nil {
+		return fmt.Errorf("scan_handler: marshal rdp probe result: %w", err)
+	}
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         string(payload),
+		ObservedAt:     clock().UTC(),
+	}
+	_, err = store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist rdp result: %w", err)
+	}
+	return nil
 }
 
 // handleHTTPProbe applique la sonde HTTP et persiste un Result dont le
