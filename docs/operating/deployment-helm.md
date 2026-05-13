@@ -176,14 +176,22 @@ Causes fréquentes :
 
 ### Les pods `scanner-*` redémarrent en boucle
 
-Depuis [`add-scanner-pgx-driver`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-scanner-pgx-driver/proposal.md) les binaires `scanner-<kind>` ouvrent une connexion Postgres au démarrage via le pilote `pgx/v5/stdlib`. Si la connexion échoue, le binaire **exit non-zéro dans ≤ 2 s** avec un message du type `db ping: ...`. Causes habituelles :
+Depuis [`remote-scanner-agents`](https://github.com/banux/Reconaut/blob/main/openspec/changes/remote-scanner-agents/proposal.md) les binaires `scanner-<kind>` **n'accèdent plus à Postgres**. Ils contactent Rails via MCP HTTPS (`/mcp/tools/claim_scan_job`). Si le boot échoue, causes habituelles :
 
-- `RECONAUT_DATABASE_URL` mal forgée dans le manifest (Secret manquant, `host=` incorrect, port fermé).
-- Postgres injoignable depuis le namespace `scanner-*` (NetworkPolicy trop stricte).
-- Tables `good_jobs` ou `scan_results` absentes (`db:migrate` non joué — relance le Job bootstrap).
-- `sslmode=require` en prod et certificat serveur non monté côté worker.
+- `scanner.apiUrl` mal renseignée dans `values.yaml` ou Service Rails injoignable.
+- `scanner.apiKey` vide ou portant les mauvais scopes (il faut `worker:claim` ET `worker:submit`).
+- NetworkPolicy trop stricte : les pods scanner doivent pouvoir egress vers le Service Rails (port 8080 par défaut) + les cibles à scanner.
+- Cert serveur Rails invalide en prod (mettre `RECONAUT_API_TLS_INSECURE=true` est acceptable en dev seulement).
 
-Recommandation prod : `sslmode=require` minimum (ou `verify-full` avec CA monté), et calibrer `max_connections` Postgres en fonction du nombre de pods × `MaxOpenConns(8)` du worker + le pool Rails.
+**Avantage du nouveau modèle** : les pods scanner peuvent vivre dans un namespace dont la NetworkPolicy egress n'autorise QUE `api-svc:8080` + l'inventaire des cibles — plus besoin d'ouvrir une route vers `postgres-svc:5432`. C'est aussi ce qui permet de déployer des workers en DMZ, dans l'infra d'un client, ou sur un edge geographique.
+
+**Provisionner la clé worker** (depuis le pod Rails) :
+
+```sh
+kubectl exec deploy/reconaut-api -- bundle exec rails reconaut:agent_key:create \
+  scopes=worker:claim,worker:submit label=k8s-cluster-prod
+# puis reporter dans values.yaml > scanner.apiKey
+```
 
 Si tu veux temporairement arrêter les workers (par ex. pour debugger sans bruit) :
 

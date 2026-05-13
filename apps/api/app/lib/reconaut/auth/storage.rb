@@ -154,7 +154,8 @@ module Reconaut
           :"read:scans", :"write:scans",
           :"read:reports", :"agent:chat",
           :"read:api_keys", :"write:api_keys",
-          :"read:health", :"write:heartbeats"
+          :"read:health", :"write:heartbeats",
+          :"worker:claim", :"worker:submit"
         ].freeze
 
         def initialize

@@ -55,6 +55,9 @@ jobs:
       # Audit des licences Go scanner. Cf. add-scanner-pgx-driver §4.1.
       - run: bash scripts/check_scanner_deps_licenses.sh
       - run: bash scripts/check_scanner_deps_licenses_test.sh
+      # Anti-accès DB côté workers. Cf. remote-scanner-agents §3.
+      - run: bash scripts/check_scanner_no_db_access.sh
+      - run: bash scripts/check_scanner_no_db_access_test.sh
       # Linter chart Helm. Cf. add-helm-chart §4.
       - uses: azure/setup-helm@v4
         with:

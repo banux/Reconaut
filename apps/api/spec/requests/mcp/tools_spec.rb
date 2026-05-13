@@ -57,7 +57,9 @@ RSpec.describe "MCP tools endpoint", type: :request do
         "request_scan", "list_scans", "get_scan_status",
         "agent_chat",
         "ingest_scan_result", "system_doctor",
-        "export_report"
+        "export_report",
+        # remote-scanner-agents : tools workers MCP-as-client
+        "claim_scan_job", "submit_scan_result", "fail_scan_job"
       )
 
       search = body[:tools].find { |t| t[:name] == "search_hosts" }

@@ -73,33 +73,36 @@ services:
     image: reconaut/scanner:0.1.0-dev
     container_name: reconaut-scanner-tcp_probe
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
     environment:
       RECONAUT_SCAN_KIND: tcp_probe
-      RECONAUT_DATABASE_URL: postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development
+      RECONAUT_API_URL: ${RECONAUT_API_URL:-http://api:3000}
+      RECONAUT_API_KEY: ${RECONAUT_WORKER_API_KEY:-changeme-worker-api-key}
     restart: unless-stopped
 
   scanner-tls_capture:
     image: reconaut/scanner:0.1.0-dev
     container_name: reconaut-scanner-tls_capture
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
     environment:
       RECONAUT_SCAN_KIND: tls_capture
-      RECONAUT_DATABASE_URL: postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development
+      RECONAUT_API_URL: ${RECONAUT_API_URL:-http://api:3000}
+      RECONAUT_API_KEY: ${RECONAUT_WORKER_API_KEY:-changeme-worker-api-key}
     restart: unless-stopped
 
   scanner-http_banner:
     image: reconaut/scanner:0.1.0-dev
     container_name: reconaut-scanner-http_banner
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
     environment:
       RECONAUT_SCAN_KIND: http_banner
-      RECONAUT_DATABASE_URL: postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development
+      RECONAUT_API_URL: ${RECONAUT_API_URL:-http://api:3000}
+      RECONAUT_API_KEY: ${RECONAUT_WORKER_API_KEY:-changeme-worker-api-key}
       RECONAUT_HTTP_PROBE_TIMEOUT: "5"
       RECONAUT_HTTP_PROBE_MAX_BODY_KB: "32"
     restart: unless-stopped
@@ -108,22 +111,24 @@ services:
     image: reconaut/scanner:0.1.0-dev
     container_name: reconaut-scanner-subdomain_enum
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
     environment:
       RECONAUT_SCAN_KIND: subdomain_enum
-      RECONAUT_DATABASE_URL: postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development
+      RECONAUT_API_URL: ${RECONAUT_API_URL:-http://api:3000}
+      RECONAUT_API_KEY: ${RECONAUT_WORKER_API_KEY:-changeme-worker-api-key}
     restart: unless-stopped
 
   scanner-service_fingerprint:
     image: reconaut/scanner:0.1.0-dev
     container_name: reconaut-scanner-service_fingerprint
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
     environment:
       RECONAUT_SCAN_KIND: service_fingerprint
-      RECONAUT_DATABASE_URL: postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development
+      RECONAUT_API_URL: ${RECONAUT_API_URL:-http://api:3000}
+      RECONAUT_API_KEY: ${RECONAUT_WORKER_API_KEY:-changeme-worker-api-key}
       RECONAUT_SSH_PROBE_TIMEOUT: "5"
     restart: unless-stopped
 
@@ -131,11 +136,12 @@ services:
     image: reconaut/scanner:0.1.0-dev
     container_name: reconaut-scanner-dns_records
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
     environment:
       RECONAUT_SCAN_KIND: dns_records
-      RECONAUT_DATABASE_URL: postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development
+      RECONAUT_API_URL: ${RECONAUT_API_URL:-http://api:3000}
+      RECONAUT_API_KEY: ${RECONAUT_WORKER_API_KEY:-changeme-worker-api-key}
     restart: unless-stopped
 
 volumes:

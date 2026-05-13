@@ -111,23 +111,34 @@ docker exec reconaut-postgres pg_dump -U reconaut reconaut_development > backup.
 docker exec -i reconaut-postgres psql -U reconaut reconaut_development < backup.sql
 ```
 
-## Configuration des workers Go (RECONAUT_DATABASE_URL)
+## Configuration des workers Go (clé API MCP)
 
-Depuis [`add-scanner-pgx-driver`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-scanner-pgx-driver/proposal.md), les binaires `scanner-<kind>` consomment la file `good_jobs` et écrivent leurs résultats dans la table `scan_results` via le pilote `pgx/v5/stdlib`. Chaque worker DOIT recevoir :
+Depuis [`remote-scanner-agents`](https://github.com/banux/Reconaut/blob/main/openspec/changes/remote-scanner-agents/proposal.md), les binaires `scanner-<kind>` **n'accèdent plus à Postgres**. Ils dialoguent uniquement avec Rails via MCP HTTPS. Chaque worker reçoit :
 
 ```sh
-RECONAUT_DATABASE_URL=postgresql://reconaut:reconaut_dev_password@postgres:5432/reconaut_development?sslmode=disable
+RECONAUT_API_URL=http://api:3000           # URL Rails (HTTPS en prod)
+RECONAUT_API_KEY=<clé scoped:worker:claim,worker:submit>
+RECONAUT_WORKER_ID=<optionnel — défaut hostname+pid>
 ```
 
-(En prod : `sslmode=require` minimum.) Sans cette variable, le worker exit non-zéro au démarrage avec un message `db ping: ...`. Le mode `--dry-run` court-circuite la DB et reste utile pour des tests d'intégration locaux.
+Sans `RECONAUT_API_KEY`, le worker exit non-zéro avec un message `RECONAUT_API_KEY required (pass --dry-run to boot without a backend)`. Le mode `--dry-run` court-circuite tout l'I/O réseau et reste utile pour smoke tests.
 
-Calibrage `max_connections` Postgres : chaque worker plafonne à **8 conns** (cf. `runtime.wireStores` : `SetMaxOpenConns(8)`). Avec 6 workers (`tcp_probe`, `tls_capture`, `http_banner`, `subdomain_enum`, `service_fingerprint`, `dns_records`), prévoir au minimum **48 conns + le pool Rails**. Le défaut Postgres est 100 — suffisant en dev local.
+**Provisionner la clé worker** (depuis l'hôte Rails) :
 
-Migration de la table `scan_results` :
+```sh
+# Crée une clé API portant les 2 scopes worker:* — à reporter dans
+# RECONAUT_WORKER_API_KEY de l'env compose.
+docker exec reconaut-api bundle exec rails reconaut:agent_key:create \
+  scopes=worker:claim,worker:submit label=docker-local
+```
+
+Migration de la table `scan_results` (toujours nécessaire — c'est Rails qui y écrit désormais) :
 
 ```sh
 docker exec reconaut-api bundle exec rails db:migrate
 ```
+
+**Topologies remote** : un worker peut tourner sur une autre machine que celle qui héberge Postgres. Il suffit de pointer `RECONAUT_API_URL` vers l'URL publique de Rails et d'injecter une clé API scopée. Aucun flux Postgres ne sort du serveur central.
 
 ## Mise à jour
 

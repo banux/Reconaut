@@ -81,6 +81,7 @@ nav:
       - Templates de graphe: architecture/graph-templates.md
       - Limites AGE: architecture/age-limits.md
       - Worker scaling: architecture/worker-scaling.md
+      - Scanners distants (MCP-as-client): architecture/remote-scanners.md
   - Opérationnel:
       - Modèle de responsabilité: operating/responsibility-model.md
       - Providers d'embedding: operating/embedder-providers.md

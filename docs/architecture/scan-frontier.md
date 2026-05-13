@@ -79,9 +79,14 @@ Les sondeurs MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
 
 ## Principes intangibles
 
-1. **Pas d'appel synchrone Rails -> Go.** Aucun HTTP, aucun gRPC, aucun
-   RPC propriétaire. La seule sortance Rails vers le perimetre scan est
-   l'enqueue dans la table `good_jobs` Postgres.
+1. **Workers Go comme clients MCP de Rails.** Depuis
+   [`remote-scanner-agents`](https://github.com/banux/Reconaut/blob/main/openspec/changes/remote-scanner-agents/proposal.md),
+   les binaires `scanner-<kind>` n'ouvrent PLUS de connexion Postgres.
+   Ils dialoguent EXCLUSIVEMENT avec Rails via MCP HTTPS — `claim_scan_job`
+   pour réclamer le prochain job, `submit_scan_result` pour remonter le
+   résultat, `fail_scan_job` pour reporter un échec. Un worker peut
+   tourner n'importe où avec un outbound HTTPS : DMZ, infra client,
+   edge geo.
 2. **Pas de logique de scan dans Rails.** Aucune ouverture de socket
    vers une cible, aucun parsing de réponse réseau d'une cible, aucun
    sondeur, aucun fingerprinter. Toute la couche réseau du scan vit
@@ -90,15 +95,14 @@ Les sondeurs MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
    schema JSON publie sous `packages/job-schema/`. Le champ
    `schema_version: int` est obligatoire.
 4. **Idempotence.** Chaque message porte une `idempotency_key` stable.
-   Les workers Go en font la clef de deduplication cote ingestion des
-   resultats. Depuis [`add-scanner-pgx-driver`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-scanner-pgx-driver/proposal.md),
-   les workers persistent leurs `Result` dans la table Postgres
-   `scan_results` via `INSERT ... ON CONFLICT (idempotency_key) DO
-   NOTHING RETURNING idempotency_key` — la déduplication est donc
-   forte au niveau DB (PRIMARY KEY).
-5. **At-least-once.** GoodJob garantit qu'un job est livre au moins une
-   fois ; les retries sont gérés par GoodJob. Les workers doivent etre
-   resilients aux relivraisons (cf. point 4).
+   Côté Rails, `submit_scan_result` fait `INSERT INTO scan_results
+   ... ON CONFLICT (idempotency_key) DO NOTHING` — déduplication forte
+   au niveau DB (PRIMARY KEY).
+5. **At-least-once.** GoodJob (côté Rails uniquement) garantit qu'un
+   job est livre au moins une fois ; les workers doivent etre
+   resilients aux relivraisons (cf. point 4). Un worker qui crashe
+   entre claim et submit voit son job ré-attribué par le recurring
+   job `LeaseReleaseJob` après 5 minutes.
 
 ## Schemas en vigueur
 

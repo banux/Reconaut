@@ -14,6 +14,9 @@ require_relative "../reconaut/exporter"
 require_relative "../../use_cases/scopes/list"
 require_relative "../../use_cases/scopes/add"
 require_relative "../../use_cases/scopes/revoke"
+require_relative "../../use_cases/scanner/claim_job"
+require_relative "../../use_cases/scanner/submit_result"
+require_relative "../../use_cases/scanner/fail_job"
 
 module Mcp
   # Set initial d'outils MCP (read-only en priorite). Les outils
@@ -322,6 +325,79 @@ module Mcp
       end
 
       register_export_report!
+
+      # claim_scan_job / submit_scan_result / fail_scan_job : permettent
+      # à un worker distant (sans accès Postgres) de réclamer son
+      # prochain job et de remonter son résultat via MCP HTTP.
+      # Cf. openspec/changes/remote-scanner-agents/specs/mcp-server/spec.md
+      ToolRegistry.register(
+        name:   "claim_scan_job",
+        scopes: [:"worker:claim"],
+        params_schema: {
+          queue:         { type: :string, min_length: 1, max_length: 64 },
+          worker_id:     { type: :string, min_length: 1, max_length: 128 },
+          lease_seconds: { type: :integer, required: false, default: 300, min: 1, max: 1800 }
+        }
+      ) do |params:, caller_id:|
+        result = Scanner::ClaimJob.new(
+          scope_storage: scope_storage,
+          audit_recorder: ingestion_recorder
+        ).call(
+          queue:         params[:queue],
+          worker_id:     params[:worker_id],
+          lease_seconds: params[:lease_seconds],
+          caller_id:     caller_id
+        )
+        result.body
+      end
+
+      ToolRegistry.register(
+        name:   "submit_scan_result",
+        scopes: [:"worker:submit"],
+        params_schema: {
+          job_id:          { type: :string, min_length: 1, max_length: 64 },
+          idempotency_key: { type: :string, min_length: 1, max_length: 128 },
+          scan_kind:       { type: :string, min_length: 1, max_length: 64 },
+          target_kind:     { type: :string, min_length: 1, max_length: 32 },
+          target_value:    { type: :string, min_length: 1, max_length: 255 },
+          status:          { type: :string, min_length: 1, max_length: 65_535 },
+          observed_at:     { type: :string, min_length: 10, max_length: 64 }
+        }
+      ) do |params:, caller_id:|
+        result = Scanner::SubmitResult.new(audit_recorder: ingestion_recorder).call(
+          job_id:          params[:job_id],
+          idempotency_key: params[:idempotency_key],
+          scan_kind:       params[:scan_kind],
+          target_kind:     params[:target_kind],
+          target_value:    params[:target_value],
+          status:          params[:status],
+          observed_at:     params[:observed_at],
+          caller_id:       caller_id
+        )
+        case result.status
+        when :ok
+          { ok: true }
+        when :bad_request
+          { ok: false, error: result.body[:error] }
+        else
+          { ok: false, error: "unknown" }
+        end
+      end
+
+      ToolRegistry.register(
+        name:   "fail_scan_job",
+        scopes: [:"worker:submit"],
+        params_schema: {
+          job_id: { type: :string, min_length: 1, max_length: 64 },
+          error:  { type: :string, min_length: 1, max_length: 1024 }
+        }
+      ) do |params:, caller_id:|
+        Scanner::FailJob.new(audit_recorder: ingestion_recorder).call(
+          job_id:    params[:job_id],
+          error:     params[:error],
+          caller_id: caller_id
+        ).body
+      end
 
       ToolRegistry
     end

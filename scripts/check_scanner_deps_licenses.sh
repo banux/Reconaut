@@ -32,11 +32,6 @@ fi
 # ISC, MPL-2.0).
 declare -A allowlist=(
   ["github.com/miekg/dns"]="BSD-3-Clause"
-  ["github.com/jackc/pgx/v5"]="MIT"
-  ["github.com/jackc/pgpassfile"]="MIT"
-  ["github.com/jackc/pgservicefile"]="MIT"
-  ["github.com/jackc/puddle/v2"]="MIT"
-  ["github.com/DATA-DOG/go-sqlmock"]="MIT"
   ["golang.org/x/crypto"]="BSD-3-Clause"
   ["golang.org/x/mod"]="BSD-3-Clause"
   ["golang.org/x/net"]="BSD-3-Clause"

@@ -36,6 +36,16 @@ scanner:
     - service_fingerprint
     - dns_records
   replicas: 1
+  # URL Rails que les workers contactent en MCP HTTPS. Depuis
+  # remote-scanner-agents (2026-05-13), les workers NE TOUCHENT PLUS
+  # à Postgres — toute persistance passe par cette URL.
+  # Defaults to in-cluster api service ; surcharger pour des workers
+  # déployés hors cluster (DMZ, edge, client).
+  apiUrl: "http://reconaut-api:8080"
+  # Clé API à injecter dans Authorization: Bearer <key>. DOIT porter
+  # les scopes worker:claim et worker:submit. À provisionner via
+  # `reconautctl agent-keys create` (ou équivalent).
+  apiKey: "changeme-worker-api-key"
 
 # --- Postgres ---------------------------------------------------------------
 

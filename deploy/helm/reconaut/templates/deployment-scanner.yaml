@@ -35,11 +35,16 @@ spec:
           env:
             - name: RECONAUT_SCAN_KIND
               value: {{ $kind | quote }}
+            - name: RECONAUT_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           envFrom:
-            - configMapRef:
-                name: {{ include "reconaut.fullname" $root }}-config
+            # Workers : pas de Secret partagé avec api (le secret api
+            # contient RECONAUT_DATABASE_URL — interdit ici). On utilise
+            # un Secret dédié qui n'expose que API_URL + API_KEY.
             - secretRef:
-                name: {{ include "reconaut.fullname" $root }}-secret
+                name: {{ include "reconaut.fullname" $root }}-scanner-secret
           resources:
             {{- toYaml $root.Values.resources.scanner | nindent 12 }}
 {{- end }}
