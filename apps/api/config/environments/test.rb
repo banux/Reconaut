@@ -40,4 +40,11 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Override le queue_adapter défini en application.rb : en test, on
+  # utilise :test pour que les matchers RSpec `have_enqueued_job`
+  # fonctionnent et qu'aucun job ne s'exécute réellement. Cf.
+  # openspec/changes/add-good-job-install/specs/platform/spec.md
+  #   -> Requirement: adapter test reste :test.
+  config.active_job.queue_adapter = :test
 end

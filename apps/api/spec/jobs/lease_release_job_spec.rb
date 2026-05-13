@@ -31,8 +31,8 @@ RSpec.describe LeaseReleaseJob do
 
     def insert(id:, performed_at:, finished_at: nil)
       ActiveRecord::Base.connection.execute(<<~SQL)
-        INSERT INTO good_jobs (id, queue_name, serialized_params, created_at, performed_at, finished_at)
-        VALUES ('#{id}', 'scan:test', '{}', NOW(),
+        INSERT INTO good_jobs (id, queue_name, serialized_params, created_at, updated_at, performed_at, finished_at)
+        VALUES ('#{id}', 'scan:test', '{}', NOW(), NOW(),
           #{performed_at ? "'#{performed_at.utc.iso8601}'" : 'NULL'},
           #{finished_at ? "'#{finished_at.utc.iso8601}'" : 'NULL'})
       SQL

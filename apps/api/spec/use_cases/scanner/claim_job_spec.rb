@@ -34,11 +34,12 @@ RSpec.describe Scanner::ClaimJob do
 
   def insert_good_job(id:, queue:, payload:, performed_at: nil, finished_at: nil)
     ActiveRecord::Base.connection.execute(<<~SQL)
-      INSERT INTO good_jobs (id, queue_name, serialized_params, created_at, performed_at, finished_at)
+      INSERT INTO good_jobs (id, queue_name, serialized_params, created_at, updated_at, performed_at, finished_at)
       VALUES (
         '#{id}',
         '#{queue}',
         '#{ActiveRecord::Base.connection.quote_string(payload.to_json).gsub("'", "''")}',
+        NOW(),
         NOW(),
         #{performed_at ? "'#{performed_at.iso8601}'" : 'NULL'},
         #{finished_at ? "'#{finished_at.iso8601}'" : 'NULL'}

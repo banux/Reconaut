@@ -41,5 +41,15 @@ module Api
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    # Queue adapter ActiveJob : GoodJob (Postgres-backed, table good_jobs).
+    # Cf. openspec/changes/add-good-job-install/proposal.md
+    #
+    # En `test`, config/environments/test.rb force :test (matcher
+    # have_enqueued_job RSpec). En `development` et `production`,
+    # GoodJob est le défaut — un `perform_later` produit une INSERT
+    # dans `good_jobs` que les workers Go claimeront via MCP (cf.
+    # remote-scanner-agents).
+    config.active_job.queue_adapter = :good_job
   end
 end

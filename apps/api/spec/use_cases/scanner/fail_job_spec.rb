@@ -35,8 +35,8 @@ RSpec.describe Scanner::FailJob do
       skip "Table good_jobs absente" if @gj_skip
       ActiveRecord::Base.connection.execute("DELETE FROM good_jobs")
       ActiveRecord::Base.connection.execute(<<~SQL)
-        INSERT INTO good_jobs (id, queue_name, serialized_params, created_at, performed_at)
-        VALUES ('11111111-1111-1111-1111-111111111111', 'scan:dns_records', '{}', NOW(), NOW())
+        INSERT INTO good_jobs (id, queue_name, serialized_params, created_at, updated_at, performed_at)
+        VALUES ('11111111-1111-1111-1111-111111111111', 'scan:dns_records', '{}', NOW(), NOW(), NOW())
       SQL
     end
 

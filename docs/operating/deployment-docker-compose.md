@@ -132,11 +132,13 @@ docker exec reconaut-api bundle exec rails reconaut:agent_key:create \
   scopes=worker:claim,worker:submit label=docker-local
 ```
 
-Migration de la table `scan_results` (toujours nécessaire — c'est Rails qui y écrit désormais) :
+Migration de la table `scan_results` (toujours nécessaire — c'est Rails qui y écrit désormais), et de la table `good_jobs` (file ActiveJob — cf. `add-good-job-install`) :
 
 ```sh
 docker exec reconaut-api bundle exec rails db:migrate
 ```
+
+Les workers Go ne touchent jamais à ces tables directement (cf. `remote-scanner-agents`), c'est Rails qui dialogue avec Postgres via les use cases `Scanner::ClaimJob` / `SubmitResult` / `FailJob`.
 
 **Topologies remote** : un worker peut tourner sur une autre machine que celle qui héberge Postgres. Il suffit de pointer `RECONAUT_API_URL` vers l'URL publique de Rails et d'injecter une clé API scopée. Aucun flux Postgres ne sort du serveur central.
 
