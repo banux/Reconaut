@@ -193,6 +193,8 @@ kubectl exec deploy/reconaut-api -- bundle exec rails reconaut:agent_key:create 
 # puis reporter dans values.yaml > scanner.apiKey
 ```
 
+**Observabilité** : depuis [`add-worker-observability`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-worker-observability/proposal.md), les workers émettent un heartbeat toutes les 30 secondes (configurable via `RECONAUT_HEARTBEAT_INTERVAL`, max 600 s). Pour vérifier qui est connecté : `kubectl exec deploy/reconaut-api -- bundle exec rails runner "puts Reconaut::Registry.default.heartbeat_store.list.map(&:to_h)"` ou appeler le tool MCP `list_workers`. Le `system_doctor` signale aussi `:fail` quand 0 worker est actif.
+
 Si tu veux temporairement arrêter les workers (par ex. pour debugger sans bruit) :
 
 ```sh

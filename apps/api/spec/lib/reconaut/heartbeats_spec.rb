@@ -45,7 +45,19 @@ RSpec.describe Reconaut::Heartbeats::InMemoryStore do
   it "to_h serialisable sans password ni token" do
     record = store.record!(payload)
     h = record.to_h
-    expect(h.keys).to contain_exactly(:worker_id, :worker_version, :schema_version, :inflight_jobs, :seen_at)
+    expect(h.keys).to contain_exactly(:worker_id, :worker_version, :schema_version, :inflight_jobs, :scan_kind, :seen_at)
+  end
+
+  it "record extrait scan_kind du payload (HeartbeatV1 enrichi par add-worker-observability)" do
+    enriched = payload.merge("scan_kind" => "service_fingerprint")
+    record = store.record!(enriched)
+    expect(record.scan_kind).to eq("service_fingerprint")
+    expect(record.to_h[:scan_kind]).to eq("service_fingerprint")
+  end
+
+  it "record sans scan_kind = nil (backward-compat)" do
+    record = store.record!(payload)
+    expect(record.scan_kind).to be_nil
   end
 
   it "fallback seen_at sur le clock injecté quand emitted_at absent" do

@@ -56,6 +56,10 @@ module Reconaut
       good_jobs_pending:       ->(_) { nil },
       schema_versions:         ->(_) { safe_schema_versions },
       last_worker_heartbeat:   ->(_) { nil },
+      # Probe enrichi : compte de workers actifs (heartbeat ≤ 5 min).
+      # Retourne `{ active_count: int, oldest_age_s: int|nil }` ou nil
+      # si aucune donnée disponible. Cf. add-worker-observability.
+      worker_heartbeats:       ->(_) { nil },
       # Probe d'intégration entrante : vérifie que le tool MCP
       # `ingest_scan_result` est bien enregistré au boot. Cf. change
       # `reposition-as-agent-knowledge-base` §4.4.
@@ -87,6 +91,7 @@ module Reconaut
       checks << check_good_jobs(probes, ctx)
       checks << check_schema_versions(probes, ctx)
       checks << check_last_worker(probes, ctx)
+      checks << check_worker_heartbeats(probes, ctx)
       checks << check_ingestion_endpoint(probes, ctx)
       checks << check_auth_storage(probes, ctx)
       checks << check_mcp_tls_posture(probes, ctx)
@@ -209,6 +214,38 @@ module Reconaut
           status:  :info,
           details: pretty
         )
+      end
+    end
+
+    # check_worker_heartbeats : agrège les heartbeats en cours pour
+    # signaler `degraded` quand aucun worker n'est connecté. Probe
+    # enrichi (cf. add-worker-observability) qui complète l'existant
+    # `last_worker_heartbeat`.
+    def check_worker_heartbeats(probes, ctx)
+      data = probes[:worker_heartbeats].call(ctx)
+      if data.nil?
+        Check.new(
+          name: "worker_heartbeats",
+          status: :unknown,
+          details: "probe heartbeats non disponible"
+        )
+      else
+        count = data[:active_count] || data["active_count"] || 0
+        oldest = data[:oldest_age_s] || data["oldest_age_s"]
+        if count.to_i.zero?
+          Check.new(
+            name: "worker_heartbeats",
+            status: :fail,
+            details: "0 worker actif (aucun heartbeat dans les 5 dernieres minutes)"
+          )
+        else
+          oldest_str = oldest.nil? ? "n/a" : "#{oldest}s"
+          Check.new(
+            name: "worker_heartbeats",
+            status: :info,
+            details: "active_workers_count=#{count}, oldest_active_worker_age_s=#{oldest_str}"
+          )
+        end
       end
     end
 

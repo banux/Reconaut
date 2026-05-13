@@ -35,7 +35,8 @@ RSpec.describe "MCP tools endpoint", type: :request do
       retriever: retriever,
       scope_storage: storage,
       scan_enqueuer: registry.scan_enqueuer,
-      scan_store:    registry.scan_store
+      scan_store:    registry.scan_store,
+      heartbeat_store: registry.heartbeat_store
     )
   end
 
@@ -59,7 +60,11 @@ RSpec.describe "MCP tools endpoint", type: :request do
         "ingest_scan_result", "system_doctor",
         "export_report",
         # remote-scanner-agents : tools workers MCP-as-client
-        "claim_scan_job", "submit_scan_result", "fail_scan_job"
+        "claim_scan_job", "submit_scan_result", "fail_scan_job",
+        # add-tech-stack §6 : heartbeats workers
+        "submit_heartbeat",
+        # add-worker-observability : visibilité workers connectés
+        "list_workers"
       )
 
       search = body[:tools].find { |t| t[:name] == "search_hosts" }

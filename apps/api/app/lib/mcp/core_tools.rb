@@ -17,6 +17,7 @@ require_relative "../../use_cases/scopes/revoke"
 require_relative "../../use_cases/scanner/claim_job"
 require_relative "../../use_cases/scanner/submit_result"
 require_relative "../../use_cases/scanner/fail_job"
+require_relative "../../use_cases/scanner/list_workers"
 
 module Mcp
   # Set initial d'outils MCP (read-only en priorite). Les outils
@@ -397,6 +398,25 @@ module Mcp
           error:     params[:error],
           caller_id: caller_id
         ).body
+      end
+
+      # list_workers : expose les workers ayant émis un heartbeat dans
+      # la fenêtre `recent_seconds` (défaut 5 min). Utile à l'opérateur
+      # pour voir qui est connecté.
+      # Cf. openspec/changes/add-worker-observability/specs/mcp-server/spec.md
+      if heartbeat_store
+        ToolRegistry.register(
+          name:   "list_workers",
+          scopes: [:"read:health"],
+          params_schema: {
+            recent_seconds: { type: :integer, required: false, default: 300, min: 1, max: 3600 }
+          }
+        ) do |params:, caller_id:|
+          Scanner::ListWorkers.new(heartbeat_store: heartbeat_store).call(
+            recent_seconds: params[:recent_seconds],
+            caller_id:      caller_id
+          ).body
+        end
       end
 
       ToolRegistry

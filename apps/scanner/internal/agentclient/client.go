@@ -128,6 +128,27 @@ func (c *Client) Fail(ctx context.Context, jobID, errMsg string) error {
 	return err
 }
 
+// Heartbeat appelle POST /mcp/tools/submit_heartbeat avec un payload
+// HeartbeatV1. Best-effort : le caller décide quoi faire en cas d'erreur
+// (typiquement : log Warn + retry au tick suivant).
+//
+// Cf. openspec/changes/add-worker-observability/specs/platform/spec.md
+//   -> Requirement: Workers émettent un heartbeat périodique
+func (c *Client) Heartbeat(ctx context.Context, scanKind, version string, inflightJobs int) error {
+	params := map[string]any{
+		"payload": map[string]any{
+			"schema_version": 1,
+			"worker_id":      c.WorkerID,
+			"emitted_at":     time.Now().UTC().Format(time.RFC3339),
+			"inflight_jobs":  inflightJobs,
+			"version":        version,
+			"scan_kind":      scanKind,
+		},
+	}
+	_, err := c.invoke(ctx, "submit_heartbeat", params)
+	return err
+}
+
 // invoke est l'appel HTTP générique POST /mcp/tools/<name> avec auth
 // Bearer. Retourne le sous-hash `result` de la réponse JSON.
 func (c *Client) invoke(ctx context.Context, toolName string, params map[string]any) (map[string]any, error) {

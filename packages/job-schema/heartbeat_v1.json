@@ -32,6 +32,11 @@
     "version": {
       "type": "string",
       "description": "SemVer du binaire scanner-worker."
+    },
+    "scan_kind": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "scan_kind couvert par le worker (ex. 'dns_records', 'service_fingerprint'). Ajouté par add-worker-observability ; optionnel pour backward-compat."
     }
   }
 }

@@ -36,13 +36,16 @@ func TestRun_RequiresScanKind(t *testing.T) {
 // fakeAgentClient implémente AgentClient pour exercer la boucle agent
 // sans toucher au réseau.
 type fakeAgentClient struct {
-	mu             sync.Mutex
-	claimCalls     atomic.Int64
-	submitCalls    atomic.Int64
-	failCalls      atomic.Int64
-	jobsToReturn   []*agentclient.Job // FIFO
-	lastSubmitArgs map[string]string
-	lastFailArgs   map[string]string
+	mu                    sync.Mutex
+	claimCalls            atomic.Int64
+	submitCalls           atomic.Int64
+	failCalls             atomic.Int64
+	heartbeatCalls        atomic.Int64
+	jobsToReturn          []*agentclient.Job // FIFO
+	lastSubmitArgs        map[string]string
+	lastFailArgs          map[string]string
+	lastHeartbeatArgs     map[string]string
+	lastHeartbeatInflight int
 }
 
 func (f *fakeAgentClient) Claim(_ context.Context, _ string, _ int) (*agentclient.Job, error) {
@@ -73,6 +76,17 @@ func (f *fakeAgentClient) Fail(_ context.Context, jobID, errMsg string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lastFailArgs = map[string]string{"job_id": jobID, "error": errMsg}
+	return nil
+}
+
+func (f *fakeAgentClient) Heartbeat(_ context.Context, scanKind, version string, inflight int) error {
+	f.heartbeatCalls.Add(1)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lastHeartbeatArgs = map[string]string{
+		"scan_kind": scanKind, "version": version,
+	}
+	f.lastHeartbeatInflight = inflight
 	return nil
 }
 
@@ -151,6 +165,61 @@ func TestBuildClient_HappyPath(t *testing.T) {
 	}
 	if c == nil {
 		t.Fatal("expected non-nil client")
+	}
+}
+
+// TestHeartbeatLoop_PingsClient : la goroutine heartbeat appelle le
+// client à intervalle régulier jusqu'à annulation du ctx.
+func TestHeartbeatLoop_PingsClient(t *testing.T) {
+	client := &fakeAgentClient{}
+	inflight := &atomic.Int64{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		heartbeatLoop(ctx, client, "dns_records", "0.0.0-test", inflight, 50*time.Millisecond)
+		close(done)
+	}()
+
+	// Laisse 250ms : on attend ≥ 4 heartbeats (1 initial + ~5 ticks à 50ms).
+	time.Sleep(250 * time.Millisecond)
+	cancel()
+	<-done
+
+	if got := client.heartbeatCalls.Load(); got < 4 {
+		t.Fatalf("expected ≥ 4 heartbeats in 250ms, got %d", got)
+	}
+	if client.lastHeartbeatArgs["scan_kind"] != "dns_records" {
+		t.Errorf("scan_kind args: %+v", client.lastHeartbeatArgs)
+	}
+	if client.lastHeartbeatArgs["version"] != "0.0.0-test" {
+		t.Errorf("version args: %+v", client.lastHeartbeatArgs)
+	}
+}
+
+// TestReadHeartbeatInterval : env parsing.
+func TestReadHeartbeatInterval(t *testing.T) {
+	tests := []struct {
+		env  string
+		want time.Duration
+	}{
+		{"", 30 * time.Second},
+		{"5", 5 * time.Second},
+		{"60", 60 * time.Second},
+		{"0", 30 * time.Second}, // invalid → default
+		{"-1", 30 * time.Second},
+		{"abc", 30 * time.Second},
+		{"700", 600 * time.Second}, // clamped to max
+	}
+	for _, tc := range tests {
+		t.Run(tc.env, func(t *testing.T) {
+			t.Setenv("RECONAUT_HEARTBEAT_INTERVAL", tc.env)
+			got := readHeartbeatInterval()
+			if got != tc.want {
+				t.Errorf("env=%q: got %s, want %s", tc.env, got, tc.want)
+			}
+		})
 	}
 }
 

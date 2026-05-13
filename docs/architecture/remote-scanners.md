@@ -115,6 +115,32 @@ docker run -e RECONAUT_API_URL=https://reconaut.example.com \
 
 Le client peut révoquer son worker en supprimant le conteneur ; l'opérateur peut révoquer la clé à distance.
 
+## Heartbeat & observabilité
+
+Depuis [`add-worker-observability`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-worker-observability/proposal.md), chaque worker émet un heartbeat toutes les **30 secondes** (configurable via `RECONAUT_HEARTBEAT_INTERVAL`, max 600). Le heartbeat appelle `POST /mcp/tools/submit_heartbeat` avec un payload `HeartbeatV1` :
+
+- `worker_id` (depuis `RECONAUT_WORKER_ID`)
+- `scan_kind` (par ex. `"dns_records"`)
+- `version` (SemVer du binaire)
+- `inflight_jobs` (compteur vivant)
+- `emitted_at` (timestamp RFC 3339)
+
+**Côté opérateur**, deux outils MCP exposent la visibilité :
+
+1. **`list_workers`** (scope `read:health`) — retourne les workers vus dans la fenêtre `recent_seconds` (défaut 300, max 3600). Trie par récence DESC.
+
+   ```sh
+   curl -X POST https://reconaut.example.com/mcp/tools/list_workers \
+     -H "Authorization: Bearer $RECONAUT_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"recent_seconds": 300}'
+   # → {"result": {"workers": [{worker_id, scan_kind, version, seen_at, seconds_since_last_seen}, ...]}}
+   ```
+
+2. **`system_doctor`** — son probe `worker_heartbeats` retourne `active_workers_count` et `oldest_active_worker_age_s`. Status `:fail` quand `count == 0` (aucun worker connecté) — utile pour alerter qu'aucun scan ne s'exécutera.
+
+Le heartbeat est **best-effort** : un échec HTTP est loggé en `Warn` mais n'interrompt jamais la boucle de claim/submit. Le store côté Rails est in-memory en v1 (différé : persistance DB).
+
 ## Quand un worker crashe
 
 Le contrat **at-least-once** est préservé :

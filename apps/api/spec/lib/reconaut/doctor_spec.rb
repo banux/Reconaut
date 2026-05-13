@@ -213,7 +213,45 @@ RSpec.describe Reconaut::Doctor do
       report = described_class.run(probes: probes, env: {})
       names = report.checks.map(&:name)
       expect(names).to include("rails_version", "good_jobs_pending",
-                               "schema_versions_rails", "last_worker_heartbeat")
+                               "schema_versions_rails", "last_worker_heartbeat",
+                               "worker_heartbeats")
+    end
+
+    # Probe `worker_heartbeats` ajouté par add-worker-observability.
+    describe "worker_heartbeats probe" do
+      it "info avec count et oldest_age quand des workers sont actifs" do
+        report = described_class.run(
+          probes: probes(worker_heartbeats: ->(_) {
+            { active_count: 2, oldest_age_s: 25 }
+          }),
+          env: {}
+        )
+        check = report.checks.find { |c| c.name == "worker_heartbeats" }
+        expect(check.status).to eq(:info)
+        expect(check.details).to include("active_workers_count=2")
+        expect(check.details).to include("oldest_active_worker_age_s=25s")
+      end
+
+      it "fail quand 0 workers actifs (downgrade global ok? non — c'est un :fail)" do
+        report = described_class.run(
+          probes: probes(worker_heartbeats: ->(_) {
+            { active_count: 0, oldest_age_s: nil }
+          }),
+          env: {}
+        )
+        check = report.checks.find { |c| c.name == "worker_heartbeats" }
+        expect(check.status).to eq(:fail)
+        expect(report.ok).to be false
+      end
+
+      it "unknown quand le probe retourne nil" do
+        report = described_class.run(
+          probes: probes(worker_heartbeats: ->(_) { nil }),
+          env: {}
+        )
+        check = report.checks.find { |c| c.name == "worker_heartbeats" }
+        expect(check.status).to eq(:unknown)
+      end
     end
   end
 end

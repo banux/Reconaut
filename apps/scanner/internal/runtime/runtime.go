@@ -28,7 +28,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -61,6 +63,7 @@ type AgentClient interface {
 	Claim(ctx context.Context, queue string, leaseSeconds int) (*agentclient.Job, error)
 	Submit(ctx context.Context, jobID, idemKey, scanKind, targetKind, targetValue, status string, observedAt time.Time) error
 	Fail(ctx context.Context, jobID, errMsg string) error
+	Heartbeat(ctx context.Context, scanKind, version string, inflightJobs int) error
 }
 
 // Run est l'entrypoint. Renvoie un exit code (à passer à os.Exit côté
@@ -110,18 +113,80 @@ func Run(cfg Config) int {
 	}
 
 	resStore := results.NewInMemoryStore() // pour télémétrie locale ; les résultats vrais partent vers Rails
-	handler := scanhandler.NewWithOptions(resStore, cfg.HandlerOptions)
+	inflight := &atomic.Int64{}
+	handler := wrapWithInflightCounter(scanhandler.NewWithOptions(resStore, cfg.HandlerOptions), inflight)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	log.Printf("scanner-%s %s started (queue=%s, mode=agent)", cfg.ScanKind, worker.Version, queue)
+	heartbeatInterval := readHeartbeatInterval()
+	go heartbeatLoop(ctx, client, cfg.ScanKind, worker.Version, inflight, heartbeatInterval)
+
+	log.Printf("scanner-%s %s started (queue=%s, mode=agent, heartbeat_interval=%s)",
+		cfg.ScanKind, worker.Version, queue, heartbeatInterval)
 	processed, loopErr := agentLoop(ctx, client, handler, queue, idleBackoff, leaseSeconds)
 	log.Printf("scanner-%s shutting down (processed=%d, err=%v)", cfg.ScanKind, processed, loopErr)
 	if loopErr != nil {
 		return 1
 	}
 	return 0
+}
+
+// readHeartbeatInterval lit RECONAUT_HEARTBEAT_INTERVAL (secondes,
+// défaut 30, max 600). Une valeur invalide retombe sur le défaut.
+func readHeartbeatInterval() time.Duration {
+	const def = 30 * time.Second
+	const max = 600 * time.Second
+	v := os.Getenv("RECONAUT_HEARTBEAT_INTERVAL")
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		log.Printf("scanner: invalid RECONAUT_HEARTBEAT_INTERVAL=%q, falling back to %s", v, def)
+		return def
+	}
+	d := time.Duration(n) * time.Second
+	if d > max {
+		return max
+	}
+	return d
+}
+
+// heartbeatLoop appelle client.Heartbeat à intervalle régulier jusqu'à
+// l'annulation du ctx. Best-effort : un échec est loggé et le tick
+// suivant est tenté.
+func heartbeatLoop(ctx context.Context, client AgentClient, scanKind, version string, inflight *atomic.Int64, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Premier heartbeat immédiat (sans attendre le 1er tick) pour
+	// signaler au plus vite la présence du worker.
+	if err := client.Heartbeat(ctx, scanKind, version, int(inflight.Load())); err != nil {
+		log.Printf("scanner: heartbeat error (initial): %v", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := client.Heartbeat(ctx, scanKind, version, int(inflight.Load())); err != nil {
+				log.Printf("scanner: heartbeat error: %v", err)
+			}
+		}
+	}
+}
+
+// wrapWithInflightCounter décore un goodjob.Handler pour incrémenter
+// l'`inflight` autour de chaque appel — donne au heartbeat une mesure
+// vivante du nombre de jobs en cours.
+func wrapWithInflightCounter(h goodjob.Handler, inflight *atomic.Int64) goodjob.Handler {
+	return func(ctx context.Context, job goodjob.Job) error {
+		inflight.Add(1)
+		defer inflight.Add(-1)
+		return h(ctx, job)
+	}
 }
 
 // runDryRun garde le comportement smoke-test : InMemory + boucle

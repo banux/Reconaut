@@ -203,6 +203,40 @@ func TestAuthHeader_BearerInjected(t *testing.T) {
 	}
 }
 
+func TestHeartbeat_HappyPath(t *testing.T) {
+	srv := newFakeRails(t)
+	defer srv.Close()
+	srv.on("submit_heartbeat", map[string]any{"ok": true, "recorded": map[string]any{}}, 200)
+
+	c := New(srv.URL, "k-secret", "w-fra1", false)
+	if err := c.Heartbeat(context.Background(), "dns_records", "0.0.0-test", 0); err != nil {
+		t.Fatalf("Heartbeat: %v", err)
+	}
+	reqs := srv.recorded()
+	if len(reqs) != 1 || reqs[0].Tool != "submit_heartbeat" {
+		t.Fatalf("expected 1 submit_heartbeat request, got %+v", reqs)
+	}
+	payload, ok := reqs[0].Body["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload not a map: %+v", reqs[0].Body)
+	}
+	if payload["worker_id"] != "w-fra1" {
+		t.Errorf("worker_id: %v", payload["worker_id"])
+	}
+	if payload["scan_kind"] != "dns_records" {
+		t.Errorf("scan_kind: %v", payload["scan_kind"])
+	}
+	if payload["version"] != "0.0.0-test" {
+		t.Errorf("version: %v", payload["version"])
+	}
+	if payload["schema_version"] != float64(1) {
+		t.Errorf("schema_version: %v", payload["schema_version"])
+	}
+	if payload["inflight_jobs"] != float64(0) {
+		t.Errorf("inflight_jobs: %v", payload["inflight_jobs"])
+	}
+}
+
 func TestNoAuthHeader_WhenAPIKeyEmpty(t *testing.T) {
 	srv := newFakeRails(t)
 	defer srv.Close()

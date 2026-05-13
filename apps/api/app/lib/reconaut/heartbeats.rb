@@ -12,7 +12,7 @@ module Reconaut
   # bin/doctor : « version Go du dernier worker connu, dernier
   # schema_version connu côté Go »).
   module Heartbeats
-    Record = Struct.new(:worker_id, :worker_version, :schema_version, :inflight_jobs, :seen_at,
+    Record = Struct.new(:worker_id, :worker_version, :schema_version, :inflight_jobs, :scan_kind, :seen_at,
                         keyword_init: true) do
       def to_h
         {
@@ -20,6 +20,7 @@ module Reconaut
           worker_version: worker_version,
           schema_version: schema_version,
           inflight_jobs:  inflight_jobs,
+          scan_kind:      scan_kind,
           seen_at:        seen_at
         }
       end
@@ -44,12 +45,14 @@ module Reconaut
         inflight       = int_at(payload, "inflight_jobs")
         emitted_at     = string_at(payload, "emitted_at")
         schema_version = int_at(payload, "schema_version")
+        scan_kind      = string_at(payload, "scan_kind")
 
         record = Record.new(
           worker_id:      worker_id,
           worker_version: worker_version,
           schema_version: schema_version,
           inflight_jobs:  inflight,
+          scan_kind:      scan_kind,
           seen_at:        emitted_at || @clock.call.utc.iso8601
         )
         @mutex.synchronize { @latest[worker_id] = record }
