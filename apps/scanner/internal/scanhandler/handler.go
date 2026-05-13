@@ -116,6 +116,33 @@ type RDPProber interface {
 	Probe(ctx context.Context, target string, port int) (RDPProbeResult, error)
 }
 
+// MQTTProber est l'interface invoquée pour les jobs
+// scan_kind="service_fingerprint" qui ciblent un host avec port=1883
+// ou 8883 (ou options.protocols inclut "mqtt"). Le binaire
+// scanner-service_fingerprint injecte une implémentation backée par
+// internal/mqttprobe.
+//
+// Cf. openspec/changes/add-mqtt-probe/tasks.md §2.1.
+type MQTTProber interface {
+	Probe(ctx context.Context, target string, port int) (MQTTProbeResult, error)
+}
+
+// MQTTProbeResult est le format minimal qu'un MQTTProber retourne au
+// handler. Mappable 1:1 avec mqttprobe.Result sans coupler ce package
+// à mqttprobe.
+type MQTTProbeResult struct {
+	ProtocolLevel     uint8    `json:"protocol_level"`
+	ReturnCode        uint8    `json:"return_code"`
+	ReturnCodeMeaning string   `json:"return_code_meaning"`
+	SessionPresent    bool     `json:"session_present"`
+	TLSCertSHA256     string   `json:"tls_cert_sha256"`
+	TLSSANs           []string `json:"tls_sans"`
+	TLSNotAfter       string   `json:"tls_not_after"`
+	DurationMs        int      `json:"duration_ms"`
+	BytesReceived     int      `json:"bytes_received"`
+	Outcome           string   `json:"outcome"`
+}
+
 // RDPProbeResult est le format minimal qu'un RDPProber retourne au
 // handler. Mappable 1:1 avec rdpprobe.Result sans coupler ce package
 // à rdpprobe.
@@ -151,6 +178,7 @@ type Options struct {
 	SSHProber    SSHProber
 	HTTPProber   HTTPProber
 	RDPProber    RDPProber
+	MQTTProber   MQTTProber
 	ScopeChecker ScopeChecker
 	Clock        func() time.Time
 }
@@ -211,6 +239,10 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 
 		if scanKind == "service_fingerprint" && shouldProbeRDP(job.Params) {
 			return handleRDPProbe(ctx, store, opts.RDPProber, clock, idemKey, scanKind, targetKind, targetValue, rdpPort(job.Params))
+		}
+
+		if scanKind == "service_fingerprint" && shouldProbeMQTT(job.Params) {
+			return handleMQTTProbe(ctx, store, opts.MQTTProber, clock, idemKey, scanKind, targetKind, targetValue, mqttPort(job.Params))
 		}
 
 		if scanKind == "http_banner" {
@@ -609,6 +641,82 @@ func handleRDPProbe(ctx context.Context, store results.Store, prober RDPProber,
 	_, err = store.Insert(ctx, result)
 	if err != nil {
 		return fmt.Errorf("scan_handler: persist rdp result: %w", err)
+	}
+	return nil
+}
+
+// shouldProbeMQTT décide si un job service_fingerprint doit déclencher
+// le sondeur MQTT. Critères (cf. add-mqtt-probe §2.1) :
+//
+//   - target_kind ∈ {ip, host}
+//   - findings contient {port: 1883} OU {port: 8883}, OU
+//     options.protocols inclut "mqtt"
+func shouldProbeMQTT(params map[string]any) bool {
+	targetKind, _ := extractTarget(params)
+	if targetKind != "ip" && targetKind != "host" {
+		return false
+	}
+	if hasPortInFindings(params, 1883) || hasPortInFindings(params, 8883) {
+		return true
+	}
+	if hasProtocolInOptions(params, "mqtt") {
+		return true
+	}
+	return false
+}
+
+// mqttPort retourne le port MQTT à sonder. Préfère 8883 (TLS) si
+// annoncé dans findings, sinon 1883.
+func mqttPort(params map[string]any) int {
+	if hasPortInFindings(params, 8883) {
+		return 8883
+	}
+	if hasPortInFindings(params, 1883) {
+		return 1883
+	}
+	if p, ok := portFromFindings(params, "mqtt"); ok {
+		return p
+	}
+	return 1883
+}
+
+// handleMQTTProbe applique la sonde MQTT et persiste un Result dont
+// le champ Status sérialise le MQTTProbeResult.
+func handleMQTTProbe(ctx context.Context, store results.Store, prober MQTTProber,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string, port int) error {
+	if prober == nil {
+		result := results.Result{
+			IdempotencyKey: idemKey,
+			ScanKind:       scanKind,
+			TargetKind:     targetKind,
+			TargetValue:    targetValue,
+			Status:         "skipped (no MQTTProber wired)",
+			ObservedAt:     clock().UTC(),
+		}
+		_, err := store.Insert(ctx, result)
+		return err
+	}
+
+	probeRes, err := prober.Probe(ctx, targetValue, port)
+	if err != nil {
+		return fmt.Errorf("scan_handler: mqtt probe: %w", err)
+	}
+
+	payload, err := json.Marshal(probeRes)
+	if err != nil {
+		return fmt.Errorf("scan_handler: marshal mqtt probe result: %w", err)
+	}
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         string(payload),
+		ObservedAt:     clock().UTC(),
+	}
+	_, err = store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist mqtt result: %w", err)
 	}
 	return nil
 }

@@ -2,12 +2,13 @@
 // scanner-service_fingerprint : binaire spécialisé `scan:service_fingerprint`.
 //
 // Pour la v1, ce binaire couvre le sondage SSH (banner + host-key
-// SHA-256) et RDP (X.224 Negotiation + capture TLS cert opt-in),
-// tous deux sans authentification.
-// Cf. openspec/changes/add-ssh-probe/ et add-rdp-probe/.
+// SHA-256), RDP (X.224 Negotiation + capture TLS cert opt-in) et
+// MQTT (CONNECT/CONNACK + capture TLS cert sur 8883), tous sans
+// authentification.
+// Cf. openspec/changes/add-ssh-probe/, add-rdp-probe/, add-mqtt-probe/.
 //
-// Les autres protocoles (MQTT, CoAP, Modbus) seront livrés par des
-// changes dédiés qui ajouteront leurs adaptateurs dans scanhandler.Options
+// Les autres protocoles (CoAP, Modbus) seront livrés par des changes
+// dédiés qui ajouteront leurs adaptateurs dans scanhandler.Options
 // sans modifier ce main.
 //
 // Variables d'environnement :
@@ -15,6 +16,9 @@
 //   - RECONAUT_RDP_PROBE_TIMEOUT : timeout sonde RDP en secondes (défaut 5).
 //   - RECONAUT_RDP_PROBE_DISABLE_TLS_UPGRADE : "true"/"1" pour désactiver
 //     l'upgrade TLS RDP (cert non capturé même si PROTOCOL_SSL annoncé).
+//   - RECONAUT_MQTT_PROBE_TIMEOUT : timeout sonde MQTT en secondes (défaut 5).
+//   - RECONAUT_MQTT_PROBE_DISABLE_TLS_UPGRADE : "true"/"1" pour désactiver
+//     l'upgrade TLS MQTT sur port 8883.
 package main
 
 import (
@@ -24,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banux/Reconaut/apps/scanner/internal/mqttprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/rdpprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/runtime"
 	"github.com/banux/Reconaut/apps/scanner/internal/scanhandler"
@@ -50,6 +55,17 @@ func main() {
 		rdpTLSUpgrade = false
 	}
 
+	mqttTimeoutSec := 5
+	if v := os.Getenv("RECONAUT_MQTT_PROBE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			mqttTimeoutSec = n
+		}
+	}
+	mqttTLSUpgrade := true
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("RECONAUT_MQTT_PROBE_DISABLE_TLS_UPGRADE"))); v == "true" || v == "1" || v == "yes" {
+		mqttTLSUpgrade = false
+	}
+
 	sshProber := sshAdapter{cfg: sshprobe.Config{
 		Timeout: time.Duration(sshTimeoutSec) * time.Second,
 	}}
@@ -59,12 +75,18 @@ func main() {
 		TryTLSUpgrade: rdpTLSUpgrade,
 	}}
 
+	mqttProber := mqttAdapter{cfg: mqttprobe.Config{
+		Timeout:       time.Duration(mqttTimeoutSec) * time.Second,
+		TryTLSUpgrade: mqttTLSUpgrade,
+	}}
+
 	os.Exit(runtime.Run(runtime.Config{
 		ScanKind: "service_fingerprint",
 		Args:     os.Args[1:],
 		HandlerOptions: scanhandler.Options{
-			SSHProber: sshProber,
-			RDPProber: rdpProber,
+			SSHProber:  sshProber,
+			RDPProber:  rdpProber,
+			MQTTProber: mqttProber,
 		},
 	}))
 }
@@ -117,5 +139,33 @@ func (a rdpAdapter) Probe(ctx context.Context, target string, port int) (scanhan
 		DurationMs:             res.DurationMs,
 		BytesReceived:          res.BytesReceived,
 		Outcome:                res.Outcome,
+	}, nil
+}
+
+// mqttAdapter adapte mqttprobe.Probe à l'interface scanhandler.MQTTProber.
+type mqttAdapter struct {
+	cfg mqttprobe.Config
+}
+
+func (a mqttAdapter) Probe(ctx context.Context, target string, port int) (scanhandler.MQTTProbeResult, error) {
+	cfg := a.cfg
+	if port > 0 {
+		cfg.Port = port
+	}
+	res, err := mqttprobe.Probe(ctx, target, cfg)
+	if err != nil {
+		return scanhandler.MQTTProbeResult{}, err
+	}
+	return scanhandler.MQTTProbeResult{
+		ProtocolLevel:     res.ProtocolLevel,
+		ReturnCode:        res.ReturnCode,
+		ReturnCodeMeaning: res.ReturnCodeMeaning,
+		SessionPresent:    res.SessionPresent,
+		TLSCertSHA256:     res.TLSCertSHA256,
+		TLSSANs:           res.TLSSANs,
+		TLSNotAfter:       res.TLSNotAfter,
+		DurationMs:        res.DurationMs,
+		BytesReceived:     res.BytesReceived,
+		Outcome:           res.Outcome,
 	}, nil
 }

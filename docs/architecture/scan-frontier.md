@@ -75,7 +75,19 @@ n'apparaît jamais dans le code prod, garanti statiquement par
 `RECONAUT_RDP_PROBE_DISABLE_TLS_UPGRADE` (`true`/`1` pour désactiver
 le capture du cert même si SSL annoncé).
 
-Les sondeurs MQTT, CoAP, Modbus seront ajoutés par des changes dédiés.
+Le binaire couvre aussi **MQTT** depuis
+[`add-mqtt-probe`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-mqtt-probe/proposal.md) :
+sur TCP/1883 et /8883, il envoie un **MQTT CONNECT** (clean session,
+sans credential ni Will) puis lit le **CONNACK** pour récupérer le
+`protocol_level`, le `return_code` (0=accepted, 1-5 = différents
+refus standards) et le `session_present` flag. Aucun **PUBLISH /
+SUBSCRIBE / UNSUBSCRIBE / PINGREQ** n'est émis ; sur port 8883, le
+sondeur fait un handshake TLS pour capturer le cert avant le CONNECT.
+Garanti statiquement par `scripts/check_mqtt_probe_no_auth.sh`.
+Variables d'env : `RECONAUT_MQTT_PROBE_TIMEOUT`,
+`RECONAUT_MQTT_PROBE_DISABLE_TLS_UPGRADE`.
+
+Les sondeurs CoAP et Modbus seront ajoutés par des changes dédiés.
 
 ## Principes intangibles
 
