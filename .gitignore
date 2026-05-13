@@ -36,3 +36,5 @@ apps/scanner/coverage.out
 /site/
 /.venv-docs/
 
+.claude/
+apps/tui/reconautctl
