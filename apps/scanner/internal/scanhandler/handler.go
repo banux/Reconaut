@@ -143,6 +143,30 @@ type MQTTProbeResult struct {
 	Outcome           string   `json:"outcome"`
 }
 
+// CoAPProber est l'interface invoquée pour les jobs
+// scan_kind="service_fingerprint" qui ciblent un host avec port=5683
+// (ou options.protocols inclut "coap"). Le binaire
+// scanner-service_fingerprint injecte une implémentation backée par
+// internal/coapprobe.
+//
+// Cf. openspec/changes/add-coap-probe/tasks.md §2.1.
+type CoAPProber interface {
+	Probe(ctx context.Context, target string, port int) (CoAPProbeResult, error)
+}
+
+// CoAPProbeResult est le format minimal qu'un CoAPProber retourne au
+// handler. Mappable 1:1 avec coapprobe.Result.
+type CoAPProbeResult struct {
+	ResponseCodeClass   uint8  `json:"response_code_class"`
+	ResponseCodeDetail  uint8  `json:"response_code_detail"`
+	ResponseCodeMeaning string `json:"response_code_meaning"`
+	ContentFormat       int    `json:"content_format"`
+	PayloadExcerpt      string `json:"payload_excerpt"`
+	DurationMs          int    `json:"duration_ms"`
+	BytesReceived       int    `json:"bytes_received"`
+	Outcome             string `json:"outcome"`
+}
+
 // RDPProbeResult est le format minimal qu'un RDPProber retourne au
 // handler. Mappable 1:1 avec rdpprobe.Result sans coupler ce package
 // à rdpprobe.
@@ -179,6 +203,7 @@ type Options struct {
 	HTTPProber   HTTPProber
 	RDPProber    RDPProber
 	MQTTProber   MQTTProber
+	CoAPProber   CoAPProber
 	ScopeChecker ScopeChecker
 	Clock        func() time.Time
 }
@@ -243,6 +268,10 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 
 		if scanKind == "service_fingerprint" && shouldProbeMQTT(job.Params) {
 			return handleMQTTProbe(ctx, store, opts.MQTTProber, clock, idemKey, scanKind, targetKind, targetValue, mqttPort(job.Params))
+		}
+
+		if scanKind == "service_fingerprint" && shouldProbeCoAP(job.Params) {
+			return handleCoAPProbe(ctx, store, opts.CoAPProber, clock, idemKey, scanKind, targetKind, targetValue, coapPort(job.Params))
 		}
 
 		if scanKind == "http_banner" {
@@ -717,6 +746,74 @@ func handleMQTTProbe(ctx context.Context, store results.Store, prober MQTTProber
 	_, err = store.Insert(ctx, result)
 	if err != nil {
 		return fmt.Errorf("scan_handler: persist mqtt result: %w", err)
+	}
+	return nil
+}
+
+// shouldProbeCoAP décide si un job service_fingerprint doit déclencher
+// le sondeur CoAP. Critères (cf. add-coap-probe §2.1) :
+//
+//   - target_kind ∈ {ip, host}
+//   - findings contient {port: 5683}, OU options.protocols inclut "coap"
+func shouldProbeCoAP(params map[string]any) bool {
+	targetKind, _ := extractTarget(params)
+	if targetKind != "ip" && targetKind != "host" {
+		return false
+	}
+	if hasPortInFindings(params, 5683) {
+		return true
+	}
+	if hasProtocolInOptions(params, "coap") {
+		return true
+	}
+	return false
+}
+
+// coapPort retourne le port CoAP à sonder, défaut 5683.
+func coapPort(params map[string]any) int {
+	if p, ok := portFromFindings(params, "coap"); ok {
+		return p
+	}
+	return 5683
+}
+
+// handleCoAPProbe applique la sonde CoAP et persiste un Result dont
+// le champ Status sérialise le CoAPProbeResult.
+func handleCoAPProbe(ctx context.Context, store results.Store, prober CoAPProber,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string, port int) error {
+	if prober == nil {
+		result := results.Result{
+			IdempotencyKey: idemKey,
+			ScanKind:       scanKind,
+			TargetKind:     targetKind,
+			TargetValue:    targetValue,
+			Status:         "skipped (no CoAPProber wired)",
+			ObservedAt:     clock().UTC(),
+		}
+		_, err := store.Insert(ctx, result)
+		return err
+	}
+
+	probeRes, err := prober.Probe(ctx, targetValue, port)
+	if err != nil {
+		return fmt.Errorf("scan_handler: coap probe: %w", err)
+	}
+
+	payload, err := json.Marshal(probeRes)
+	if err != nil {
+		return fmt.Errorf("scan_handler: marshal coap probe result: %w", err)
+	}
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         string(payload),
+		ObservedAt:     clock().UTC(),
+	}
+	_, err = store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist coap result: %w", err)
 	}
 	return nil
 }

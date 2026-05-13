@@ -55,6 +55,9 @@ jobs:
       # Linter anti-auth du sondeur MQTT. Cf. add-mqtt-probe §1.3.
       - run: bash scripts/check_mqtt_probe_no_auth.sh
       - run: bash scripts/check_mqtt_probe_no_auth_test.sh
+      # Linter anti-offensif du sondeur CoAP. Cf. add-coap-probe §1.3.
+      - run: bash scripts/check_coap_probe_no_offensive.sh
+      - run: bash scripts/check_coap_probe_no_offensive_test.sh
       # Audit des licences Go scanner. Cf. add-scanner-pgx-driver §4.1.
       - run: bash scripts/check_scanner_deps_licenses.sh
       - run: bash scripts/check_scanner_deps_licenses_test.sh

@@ -87,7 +87,18 @@ Garanti statiquement par `scripts/check_mqtt_probe_no_auth.sh`.
 Variables d'env : `RECONAUT_MQTT_PROBE_TIMEOUT`,
 `RECONAUT_MQTT_PROBE_DISABLE_TLS_UPGRADE`.
 
-Les sondeurs CoAP et Modbus seront ajoutés par des changes dédiés.
+Le binaire couvre aussi **CoAP** depuis
+[`add-coap-probe`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-coap-probe/proposal.md) :
+sur UDP/5683, il envoie un seul **GET `/.well-known/core`**
+(RFC 6690, CoRE Link Format) en confirmable et capture le response
+code, le content-format (option 12) et un excerpt du payload
+(plafonné à 4 KiB). **Méthode = GET uniquement** ; aucun
+PUT/POST/DELETE/Observe ; aucun broadcast multicast (`224.0.1.187`
+refusé statiquement et au runtime). Garanti par
+`scripts/check_coap_probe_no_offensive.sh`. Variable d'env :
+`RECONAUT_COAP_PROBE_TIMEOUT`. DTLS (port 5684) est différé.
+
+Le dernier sondeur §2.5, **Modbus**, sera ajouté par un change dédié.
 
 ## Principes intangibles
 

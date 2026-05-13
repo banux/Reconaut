@@ -2,14 +2,14 @@
 // scanner-service_fingerprint : binaire spécialisé `scan:service_fingerprint`.
 //
 // Pour la v1, ce binaire couvre le sondage SSH (banner + host-key
-// SHA-256), RDP (X.224 Negotiation + capture TLS cert opt-in) et
-// MQTT (CONNECT/CONNACK + capture TLS cert sur 8883), tous sans
-// authentification.
-// Cf. openspec/changes/add-ssh-probe/, add-rdp-probe/, add-mqtt-probe/.
+// SHA-256), RDP (X.224 Negotiation + capture TLS cert opt-in),
+// MQTT (CONNECT/CONNACK + capture TLS cert sur 8883) et CoAP
+// (GET /.well-known/core sur UDP/5683), tous sans authentification
+// et sans mutation.
+// Cf. openspec/changes/add-ssh-probe/, add-rdp-probe/, add-mqtt-probe/,
+// add-coap-probe/.
 //
-// Les autres protocoles (CoAP, Modbus) seront livrés par des changes
-// dédiés qui ajouteront leurs adaptateurs dans scanhandler.Options
-// sans modifier ce main.
+// Le dernier protocole §2.5 (Modbus) sera livré par un change dédié.
 //
 // Variables d'environnement :
 //   - RECONAUT_SSH_PROBE_TIMEOUT : timeout sonde SSH en secondes (défaut 5).
@@ -19,6 +19,7 @@
 //   - RECONAUT_MQTT_PROBE_TIMEOUT : timeout sonde MQTT en secondes (défaut 5).
 //   - RECONAUT_MQTT_PROBE_DISABLE_TLS_UPGRADE : "true"/"1" pour désactiver
 //     l'upgrade TLS MQTT sur port 8883.
+//   - RECONAUT_COAP_PROBE_TIMEOUT : timeout sonde CoAP en secondes (défaut 5).
 package main
 
 import (
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banux/Reconaut/apps/scanner/internal/coapprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/mqttprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/rdpprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/runtime"
@@ -80,6 +82,16 @@ func main() {
 		TryTLSUpgrade: mqttTLSUpgrade,
 	}}
 
+	coapTimeoutSec := 5
+	if v := os.Getenv("RECONAUT_COAP_PROBE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			coapTimeoutSec = n
+		}
+	}
+	coapProber := coapAdapter{cfg: coapprobe.Config{
+		Timeout: time.Duration(coapTimeoutSec) * time.Second,
+	}}
+
 	os.Exit(runtime.Run(runtime.Config{
 		ScanKind: "service_fingerprint",
 		Args:     os.Args[1:],
@@ -87,6 +99,7 @@ func main() {
 			SSHProber:  sshProber,
 			RDPProber:  rdpProber,
 			MQTTProber: mqttProber,
+			CoAPProber: coapProber,
 		},
 	}))
 }
@@ -167,5 +180,31 @@ func (a mqttAdapter) Probe(ctx context.Context, target string, port int) (scanha
 		DurationMs:        res.DurationMs,
 		BytesReceived:     res.BytesReceived,
 		Outcome:           res.Outcome,
+	}, nil
+}
+
+// coapAdapter adapte coapprobe.Probe à l'interface scanhandler.CoAPProber.
+type coapAdapter struct {
+	cfg coapprobe.Config
+}
+
+func (a coapAdapter) Probe(ctx context.Context, target string, port int) (scanhandler.CoAPProbeResult, error) {
+	cfg := a.cfg
+	if port > 0 {
+		cfg.Port = port
+	}
+	res, err := coapprobe.Probe(ctx, target, cfg)
+	if err != nil {
+		return scanhandler.CoAPProbeResult{}, err
+	}
+	return scanhandler.CoAPProbeResult{
+		ResponseCodeClass:   res.ResponseCodeClass,
+		ResponseCodeDetail:  res.ResponseCodeDetail,
+		ResponseCodeMeaning: res.ResponseCodeMeaning,
+		ContentFormat:       res.ContentFormat,
+		PayloadExcerpt:      res.PayloadExcerpt,
+		DurationMs:          res.DurationMs,
+		BytesReceived:       res.BytesReceived,
+		Outcome:             res.Outcome,
 	}, nil
 }
