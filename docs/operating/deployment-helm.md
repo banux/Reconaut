@@ -109,6 +109,14 @@ mcp:
 helm upgrade reconaut deploy/helm/reconaut -f values-prod.yaml --reuse-values
 ```
 
+## Cron & maintenance (LeaseReleaseJob)
+
+Depuis [`add-good-job-cron-config`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-good-job-cron-config/proposal.md), GoodJob tourne en mode `:async` **dans le pod `api`** (pas de pod séparé en v1). Le seul cron schédulé est `LeaseReleaseJob`, qui s'exécute **chaque minute** pour re-queue les jobs scan dont le lease worker a expiré (>5 min) — garantit le contrat at-least-once de `remote-scanner-agents`.
+
+Aucune action côté Helm : le job s'active automatiquement quand le pod `api` boot.
+
+Pour scaler horizontalement les replicas `api`, garder en tête : avec `:async`, chaque replica polle le cron — pas un problème (GoodJob 4.x utilise une lock pour qu'un seul replica exécute le cron à la fois). Si le besoin évolue (jobs lourds, isolation), passer à `execution_mode=:external` (pod GoodJob dédié) sera un futur change.
+
 ## Mise à jour
 
 ```sh

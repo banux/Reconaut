@@ -146,7 +146,7 @@ Le heartbeat est **best-effort** : un échec HTTP est loggé en `Warn` mais n'in
 Le contrat **at-least-once** est préservé :
 
 1. Rails set `good_jobs.performed_at = NOW()` au claim → lease de 5 min implicite.
-2. Si le worker ne fait pas `submit_scan_result` ou `fail_scan_job` dans les 5 min, le job `LeaseReleaseJob` (recurring, toutes les 60 s) remet `performed_at = NULL`.
+2. Si le worker ne fait pas `submit_scan_result` ou `fail_scan_job` dans les 5 min, le job `LeaseReleaseJob` — schédulé toutes les 60 s via [`add-good-job-cron-config`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-good-job-cron-config/proposal.md) (GoodJob `:async` dans le process Puma) — remet `performed_at = NULL`.
 3. Un autre worker (ou le même redémarré) re-claim le job.
 4. L'`idempotency_key` du payload garantit que même si le job est exécuté 2 fois, `scan_results` ne contient qu'une seule ligne.
 

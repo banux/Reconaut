@@ -142,6 +142,20 @@ Les workers Go ne touchent jamais à ces tables directement (cf. `remote-scanner
 
 **Topologies remote** : un worker peut tourner sur une autre machine que celle qui héberge Postgres. Il suffit de pointer `RECONAUT_API_URL` vers l'URL publique de Rails et d'injecter une clé API scopée. Aucun flux Postgres ne sort du serveur central.
 
+## Cron & maintenance (LeaseReleaseJob)
+
+Depuis [`add-good-job-cron-config`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-good-job-cron-config/proposal.md), GoodJob tourne en mode `:async` **dans le process Puma** (pas de service séparé en v1). Le seul cron schédulé est `LeaseReleaseJob`, qui s'exécute **chaque minute** pour re-queue les jobs scan dont le lease worker a expiré (>5 min) — garantit le contrat at-least-once de `remote-scanner-agents`.
+
+Aucune action côté docker-compose : le job s'active automatiquement quand le service `api` boot.
+
+Pour vérifier en local que le cron tourne :
+
+```sh
+docker exec reconaut-api bundle exec rails runner \
+  "puts Rails.application.config.good_job.cron.inspect"
+# → {lease_release: {cron: "* * * * *", class: "LeaseReleaseJob", ...}}
+```
+
 ## Mise à jour
 
 ```sh
