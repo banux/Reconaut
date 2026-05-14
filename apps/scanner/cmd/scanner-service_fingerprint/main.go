@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // scanner-service_fingerprint : binaire spécialisé `scan:service_fingerprint`.
 //
-// Pour la v1, ce binaire couvre le sondage SSH (banner + host-key
-// SHA-256), RDP (X.224 Negotiation + capture TLS cert opt-in),
-// MQTT (CONNECT/CONNACK + capture TLS cert sur 8883) et CoAP
-// (GET /.well-known/core sur UDP/5683), tous sans authentification
-// et sans mutation.
-// Cf. openspec/changes/add-ssh-probe/, add-rdp-probe/, add-mqtt-probe/,
-// add-coap-probe/.
+// Pour la v1, ce binaire couvre les 6 sondeurs applicatifs §2.5 :
+//   - SSH (banner + host-key SHA-256, TCP/22)
+//   - RDP (X.224 Negotiation + capture TLS cert opt-in, TCP/3389)
+//   - MQTT (CONNECT/CONNACK + capture TLS cert sur 8883, TCP/1883)
+//   - CoAP (GET /.well-known/core, UDP/5683)
+//   - Modbus (Read Device ID + fallback Read Holding, TCP/502)
 //
-// Le dernier protocole §2.5 (Modbus) sera livré par un change dédié.
+// Tous sans authentification, sans mutation, sans énumération.
+// Cf. openspec/changes/add-ssh-probe/, add-rdp-probe/, add-mqtt-probe/,
+// add-coap-probe/, add-worker-modbus/.
 //
 // Variables d'environnement :
 //   - RECONAUT_SSH_PROBE_TIMEOUT : timeout sonde SSH en secondes (défaut 5).
@@ -20,6 +21,8 @@
 //   - RECONAUT_MQTT_PROBE_DISABLE_TLS_UPGRADE : "true"/"1" pour désactiver
 //     l'upgrade TLS MQTT sur port 8883.
 //   - RECONAUT_COAP_PROBE_TIMEOUT : timeout sonde CoAP en secondes (défaut 5).
+//   - RECONAUT_MODBUS_PROBE_TIMEOUT : timeout sonde Modbus en secondes (défaut 5).
+//   - RECONAUT_MODBUS_PROBE_UNIT_ID : Unit ID Modbus (1-255, défaut 1).
 package main
 
 import (
@@ -30,6 +33,7 @@ import (
 	"time"
 
 	"github.com/banux/Reconaut/apps/scanner/internal/coapprobe"
+	"github.com/banux/Reconaut/apps/scanner/internal/modbusprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/mqttprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/rdpprobe"
 	"github.com/banux/Reconaut/apps/scanner/internal/runtime"
@@ -92,14 +96,32 @@ func main() {
 		Timeout: time.Duration(coapTimeoutSec) * time.Second,
 	}}
 
+	modbusTimeoutSec := 5
+	if v := os.Getenv("RECONAUT_MODBUS_PROBE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			modbusTimeoutSec = n
+		}
+	}
+	modbusUnitID := byte(1)
+	if v := os.Getenv("RECONAUT_MODBUS_PROBE_UNIT_ID"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 255 {
+			modbusUnitID = byte(n)
+		}
+	}
+	modbusProber := modbusAdapter{cfg: modbusprobe.Config{
+		Timeout: time.Duration(modbusTimeoutSec) * time.Second,
+		UnitID:  modbusUnitID,
+	}}
+
 	os.Exit(runtime.Run(runtime.Config{
 		ScanKind: "service_fingerprint",
 		Args:     os.Args[1:],
 		HandlerOptions: scanhandler.Options{
-			SSHProber:  sshProber,
-			RDPProber:  rdpProber,
-			MQTTProber: mqttProber,
-			CoAPProber: coapProber,
+			SSHProber:    sshProber,
+			RDPProber:    rdpProber,
+			MQTTProber:   mqttProber,
+			CoAPProber:   coapProber,
+			ModbusProber: modbusProber,
 		},
 	}))
 }
@@ -206,5 +228,33 @@ func (a coapAdapter) Probe(ctx context.Context, target string, port int) (scanha
 		DurationMs:          res.DurationMs,
 		BytesReceived:       res.BytesReceived,
 		Outcome:             res.Outcome,
+	}, nil
+}
+
+// modbusAdapter adapte modbusprobe.Probe à l'interface scanhandler.ModbusProber.
+type modbusAdapter struct {
+	cfg modbusprobe.Config
+}
+
+func (a modbusAdapter) Probe(ctx context.Context, target string, port int) (scanhandler.ModbusProbeResult, error) {
+	cfg := a.cfg
+	if port > 0 {
+		cfg.Port = port
+	}
+	res, err := modbusprobe.Probe(ctx, target, cfg)
+	if err != nil {
+		return scanhandler.ModbusProbeResult{}, err
+	}
+	return scanhandler.ModbusProbeResult{
+		VendorName:         res.VendorName,
+		ProductCode:        res.ProductCode,
+		MajorMinorRevision: res.MajorMinorRevision,
+		FunctionCode:       res.FunctionCode,
+		ExceptionCode:      res.ExceptionCode,
+		ExceptionMeaning:   res.ExceptionMeaning,
+		IsModbus:           res.IsModbus,
+		DurationMs:         res.DurationMs,
+		BytesReceived:      res.BytesReceived,
+		Outcome:            res.Outcome,
 	}, nil
 }

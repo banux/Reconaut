@@ -98,7 +98,23 @@ refusé statiquement et au runtime). Garanti par
 `scripts/check_coap_probe_no_offensive.sh`. Variable d'env :
 `RECONAUT_COAP_PROBE_TIMEOUT`. DTLS (port 5684) est différé.
 
-Le dernier sondeur §2.5, **Modbus**, sera ajouté par un change dédié.
+Le binaire couvre enfin **Modbus** depuis
+[`add-worker-modbus`](https://github.com/banux/Reconaut/blob/main/openspec/changes/add-worker-modbus/proposal.md) :
+sur TCP/502, il envoie un seul **Read Device Identification**
+(fonction 0x2B / sub-function 0x0E) pour capturer `vendor_name`,
+`product_code`, `major_minor_revision`. Si l'identification est
+refusée par exception, **un seul fallback Read Holding Registers**
+(fonction 0x03 à l'adresse 0) confirme au moins que c'est un
+endpoint Modbus. **READ functions uniquement** : tout write
+(0x05/0x06/0x0F/0x10/0x17) et Diagnostics (0x08 — peut RESET un
+device industriel) sont refusés statiquement par
+`scripts/check_modbus_probe_no_write.sh` ; au runtime, ≤ 2 paquets
+sont émis par sonde. Variables d'env : `RECONAUT_MODBUS_PROBE_TIMEOUT`,
+`RECONAUT_MODBUS_PROBE_UNIT_ID`.
+
+**La section §2.5 d'init-reconaut-platform est désormais complète :**
+HTTP / SSH / RDP / MQTT / CoAP / Modbus — les 6 sondeurs applicatifs
+prévus sont livrés.
 
 ## Principes intangibles
 

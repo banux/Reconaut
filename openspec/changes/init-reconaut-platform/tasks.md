@@ -50,9 +50,10 @@ Checklist fondatrice. Chaque tâche inclut des notes d'implémentation et un tes
   - **Test plan** : Test e2e ajoute une entrée via API ; assure (a) entrée présente, (b) ligne d'audit avec `actor`, `action=scope.created`, `target=<id>`, (c) un scan vers cette cible n'est plus rejeté `out-of-scope`. Révocation : un scan ultérieur est de nouveau rejeté.
   - **Statut** : (a) endpoints `GET/POST/DELETE /scopes` câblés (`apps/api/app/controllers/scopes_controller.rb` + use cases `Scopes::UseCases::List/Add/Revoke`), validation kind ∈ {domain, ip, cidr, host}, RBAC (lecture viewer+, écriture admin/owner) ; (b) audit écrit pour chaque mutation (`success` / `unauthorized` / `param_invalid`) avec `caller_id` + `params_normalized.action ∈ {create, revoke}` ; (c) UI Vue `apps/web/src/components/ScopesPanel.vue` livrée. Stockage `Scopes::Storage::InMemory` (DB-backed à venir avec le modèle `Scope` ActiveRecord). Tests : 12 specs use_case + 7 specs request + 6 specs Vitest UI. **Reste pour cocher** : (d) enforcement côté scanner (un scan vers une cible hors scope est refusé `out-of-scope`) — couvert par la tâche 2.3.
 
-- [ ] **2.5 Sondeurs de protocole : HTTP(S), SSH, RDP, MQTT, CoAP, Modbus**
+- [x] **2.5 Sondeurs de protocole : HTTP(S), SSH, RDP, MQTT, CoAP, Modbus**
   - **Notes** : Chaque sondeur renvoie un `ProbeResult` typé. Cert TLS feuille hashé (SHA-256). Extrait HTML plafonné dur à 32 KiB. SSH ne capture que la bannière + fp host-key ; jamais d'authentification.
   - **Test plan** : Replay d'un corpus de réponses embarqué pour chaque protocole ; assurer que les champs parsés matchent les snapshots golden au byte près.
+  - **Statut** : Complet (6/6 sondeurs). Livrés par les changes dédiés : `add-http-probe` (HTTP/HTTPS via `scanner-http_banner`), `add-ssh-probe`, `add-rdp-probe`, `add-mqtt-probe`, `add-coap-probe`, `add-worker-modbus` (les 5 derniers via `scanner-service_fingerprint`). Chacun avec son linter anti-offensif statique.
 
 - [ ] **2.6 Moteur de rétention**
   - **Notes** : Job nocturne : migration chaud→froid à 90 jours (défaut), surcharge opérateur honorée. Tier froid soit en chunks Timescale compressés (défaut, `cold_tier.backend=postgres_compressed`), soit en fichiers JSONL.gz sur le filesystem local (`cold_tier.backend=filesystem`, chemin configurable). Pas de stockage objet S3-compatible.

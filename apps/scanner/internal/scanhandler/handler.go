@@ -167,6 +167,32 @@ type CoAPProbeResult struct {
 	Outcome             string `json:"outcome"`
 }
 
+// ModbusProber est l'interface invoquée pour les jobs
+// scan_kind="service_fingerprint" qui ciblent un host avec port=502
+// (ou options.protocols inclut "modbus"). Le binaire
+// scanner-service_fingerprint injecte une implémentation backée par
+// internal/modbusprobe.
+//
+// Cf. openspec/changes/add-worker-modbus/tasks.md §2.1.
+type ModbusProber interface {
+	Probe(ctx context.Context, target string, port int) (ModbusProbeResult, error)
+}
+
+// ModbusProbeResult est le format minimal qu'un ModbusProber retourne
+// au handler. Mappable 1:1 avec modbusprobe.Result.
+type ModbusProbeResult struct {
+	VendorName         string `json:"vendor_name"`
+	ProductCode        string `json:"product_code"`
+	MajorMinorRevision string `json:"major_minor_revision"`
+	FunctionCode       uint8  `json:"function_code"`
+	ExceptionCode      uint8  `json:"exception_code"`
+	ExceptionMeaning   string `json:"exception_meaning"`
+	IsModbus           bool   `json:"is_modbus"`
+	DurationMs         int    `json:"duration_ms"`
+	BytesReceived      int    `json:"bytes_received"`
+	Outcome            string `json:"outcome"`
+}
+
 // RDPProbeResult est le format minimal qu'un RDPProber retourne au
 // handler. Mappable 1:1 avec rdpprobe.Result sans coupler ce package
 // à rdpprobe.
@@ -204,6 +230,7 @@ type Options struct {
 	RDPProber    RDPProber
 	MQTTProber   MQTTProber
 	CoAPProber   CoAPProber
+	ModbusProber ModbusProber
 	ScopeChecker ScopeChecker
 	Clock        func() time.Time
 }
@@ -272,6 +299,10 @@ func NewWithOptions(store results.Store, opts Options) goodjob.Handler {
 
 		if scanKind == "service_fingerprint" && shouldProbeCoAP(job.Params) {
 			return handleCoAPProbe(ctx, store, opts.CoAPProber, clock, idemKey, scanKind, targetKind, targetValue, coapPort(job.Params))
+		}
+
+		if scanKind == "service_fingerprint" && shouldProbeModbus(job.Params) {
+			return handleModbusProbe(ctx, store, opts.ModbusProber, clock, idemKey, scanKind, targetKind, targetValue, modbusPort(job.Params))
 		}
 
 		if scanKind == "http_banner" {
@@ -814,6 +845,74 @@ func handleCoAPProbe(ctx context.Context, store results.Store, prober CoAPProber
 	_, err = store.Insert(ctx, result)
 	if err != nil {
 		return fmt.Errorf("scan_handler: persist coap result: %w", err)
+	}
+	return nil
+}
+
+// shouldProbeModbus décide si un job service_fingerprint doit déclencher
+// le sondeur Modbus. Critères (cf. add-worker-modbus §2.1) :
+//
+//   - target_kind ∈ {ip, host}
+//   - findings contient {port: 502}, OU options.protocols inclut "modbus"
+func shouldProbeModbus(params map[string]any) bool {
+	targetKind, _ := extractTarget(params)
+	if targetKind != "ip" && targetKind != "host" {
+		return false
+	}
+	if hasPortInFindings(params, 502) {
+		return true
+	}
+	if hasProtocolInOptions(params, "modbus") {
+		return true
+	}
+	return false
+}
+
+// modbusPort retourne le port Modbus à sonder, défaut 502.
+func modbusPort(params map[string]any) int {
+	if p, ok := portFromFindings(params, "modbus"); ok {
+		return p
+	}
+	return 502
+}
+
+// handleModbusProbe applique la sonde Modbus et persiste un Result
+// dont le champ Status sérialise le ModbusProbeResult.
+func handleModbusProbe(ctx context.Context, store results.Store, prober ModbusProber,
+	clock func() time.Time, idemKey, scanKind, targetKind, targetValue string, port int) error {
+	if prober == nil {
+		result := results.Result{
+			IdempotencyKey: idemKey,
+			ScanKind:       scanKind,
+			TargetKind:     targetKind,
+			TargetValue:    targetValue,
+			Status:         "skipped (no ModbusProber wired)",
+			ObservedAt:     clock().UTC(),
+		}
+		_, err := store.Insert(ctx, result)
+		return err
+	}
+
+	probeRes, err := prober.Probe(ctx, targetValue, port)
+	if err != nil {
+		return fmt.Errorf("scan_handler: modbus probe: %w", err)
+	}
+
+	payload, err := json.Marshal(probeRes)
+	if err != nil {
+		return fmt.Errorf("scan_handler: marshal modbus probe result: %w", err)
+	}
+	result := results.Result{
+		IdempotencyKey: idemKey,
+		ScanKind:       scanKind,
+		TargetKind:     targetKind,
+		TargetValue:    targetValue,
+		Status:         string(payload),
+		ObservedAt:     clock().UTC(),
+	}
+	_, err = store.Insert(ctx, result)
+	if err != nil {
+		return fmt.Errorf("scan_handler: persist modbus result: %w", err)
 	}
 	return nil
 }
